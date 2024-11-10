@@ -39,7 +39,7 @@ Linux:
 
 ### 3. Build ctSVCGAL
 
-####3.1. Build Windows
+#### 3.1. Build Windows
 
 1. open CMakeLists.txt and edit path to Boost stage for windows path
 2. mkdir build_windows && cd build_windows
