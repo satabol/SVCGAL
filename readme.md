@@ -11,6 +11,6 @@ Straight Skeleton 2D Offset
 2. Install pySVCGAL
 
 
-![ssoffset](images/Straight Skeleton 2D Offset.png)
+![ssoffset](images/StraightSkeleton2DOffset.png)
 
-![ssextrude](images/Straight Skeleton 2D Extrude.png)
+![ssextrude](images/StraightSkeleton2DExtrude.png)
