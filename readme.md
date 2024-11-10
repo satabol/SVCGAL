@@ -14,3 +14,9 @@ Straight Skeleton 2D Offset
 ![ssoffset](images/StraightSkeleton2DOffset.png)
 
 ![ssextrude](images/StraightSkeleton2DExtrude.png)
+
+See:
+
+https://nortikin.github.io/sverchok/docs/nodes/CAD/stright_skeleton_2d_extrude.html
+
+https://nortikin.github.io/sverchok/docs/nodes/CAD/stright_skeleton_2d_offset.html
