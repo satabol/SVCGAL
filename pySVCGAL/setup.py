@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 from pathlib import Path, os
 
 NAME = 'pySVCGAL'
-VERSION = '0.0.11'
+VERSION = '0.0.12'
 # - First Wrapper
 DESCRIPTION = 'Python pySVCGAL.'
 
