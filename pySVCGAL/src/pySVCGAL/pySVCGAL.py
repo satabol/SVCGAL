@@ -44,8 +44,8 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     """   
 
     # https://docs.python.org/3/library/ctypes.html
-    stright_skeleton_2d_offset = SVCGAL_clib.stright_skeleton_2d_offset
-    stright_skeleton_2d_offset.argtypes = [
+    straight_skeleton_2d_offset = SVCGAL_clib.straight_skeleton_2d_offset
+    straight_skeleton_2d_offset.argtypes = [
         ctypes.c_int,                       # in_count_of_objects
         ctypes.POINTER((ctypes.c_int  ) ),  # in_shapes_mode
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_offsets (chained)
@@ -64,7 +64,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.c_int,                       # results_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
     ]
-    stright_skeleton_2d_offset.restype = ctypes.POINTER(MESH_DATA2)
+    straight_skeleton_2d_offset.restype = ctypes.POINTER(MESH_DATA2)
 
     free_mem2 = SVCGAL_clib.free_mem2
     free_mem2.argtypes = [
@@ -135,7 +135,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     
     md = None
     try:
-        md = stright_skeleton_2d_offset(
+        md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
             ctypes_in_shapes_mode,
             ctypes_in_count_of_offsets,
@@ -295,8 +295,8 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
     """   
 
     # https://docs.python.org/3/library/ctypes.html
-    stright_skeleton_2d_extrude = SVCGAL_clib.stright_skeleton_2d_extrude
-    stright_skeleton_2d_extrude.argtypes = [
+    straight_skeleton_2d_extrude = SVCGAL_clib.straight_skeleton_2d_extrude
+    straight_skeleton_2d_extrude.argtypes = [
         ctypes.c_int,                       # in_count_of_objects
         ctypes.POINTER((ctypes.c_int  ) ),  # in_shapes_mode
         ctypes.POINTER((ctypes.c_bool ) ),  # in_restrict_height
@@ -311,7 +311,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         ctypes.c_int,                       # join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
     ]
-    stright_skeleton_2d_extrude.restype = ctypes.POINTER(MESH_DATA2)
+    straight_skeleton_2d_extrude.restype = ctypes.POINTER(MESH_DATA2)
 
     free_mem2 = SVCGAL_clib.free_mem2
     free_mem2.argtypes = [
@@ -382,7 +382,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
 
     md = None
     try:
-        md = stright_skeleton_2d_extrude(
+        md = straight_skeleton_2d_extrude(
             ctypes_in_count_of_objects,
             ctypes_in_shapes_mode_list,
             ctypes_in_restrict_height_list,

@@ -1000,7 +1000,7 @@ namespace CGAL {
         /// <param name="res_type"></param>
         /// <param name="verbose"></param>
         /// <returns></returns>
-        DLLEXPORT MESH_DATA2* stright_skeleton_2d_offset(
+        DLLEXPORT MESH_DATA2* straight_skeleton_2d_offset(
           // К чему относятся входные данные. <image url="..\code_images\file_0012.png" scale="1.0"/>
           // Контуры объектов считаются независимо друт от друга
           // Контуры планов могут влиять друг на друга при отрицательных offset-ах. Контуры с положительными offset будут рассчитываться независимо.
@@ -1029,9 +1029,9 @@ namespace CGAL {
         ) {
           if (verbose == true) {
 #ifdef _DEBUG
-            printf("\nstright_skeleton_2d_offset in DEBUG MODE");
+            printf("\nstraight_skeleton_2d_offset in DEBUG MODE");
 #endif
-            printf("\nstright_skeleton_2d_offset_internal");
+            printf("\nstraight_skeleton_2d_offset_internal");
             printf("\nmode verbose is on");
           }
 
@@ -2307,7 +2307,7 @@ namespace CGAL {
         Background for Sverchok Node Straight Skeleton 2D Extrude.
         //<image url="..\code_images\file_0032.png" scale="1.0"/>
         */
-        DLLEXPORT MESH_DATA2* stright_skeleton_2d_extrude(
+        DLLEXPORT MESH_DATA2* straight_skeleton_2d_extrude(
           // К чему относятся входные данные. <image url="..\code_images\file_0012.png" scale="1.0"/>
           // Контуры объектов считаются независимо друт от друга
           // Контуры планов могут влиять друг на друга при отрицательных offset-ах. Контуры с положительными offset будут рассчитываться независимо.
@@ -2332,9 +2332,9 @@ namespace CGAL {
         ) {
           if (verbose == true) {
 #ifdef _DEBUG
-            printf("\nstright_skeleton_2d_extrude in DEBUG MODE");
+            printf("\nstraight_skeleton_2d_extrude in DEBUG MODE");
 #endif
-            printf("\nstright_skeleton_2d_extrude");
+            printf("\nstraight_skeleton_2d_extrude");
             printf("\nmode verbose is on");
           }
 
