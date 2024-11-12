@@ -10,7 +10,8 @@ def load_library():
         SVCGAL_clib = ctypes.CDLL(os.path.join(os.path.dirname(__file__),'libctSVCGAL.so'))
         pass
     elif platform == 'darwin':
-        # OSX 
+        # OSX
+        SVCGAL_clib = ctypes.CDLL(os.path.join(os.path.dirname(__file__),'libctSVCGAL.dylib'))
         pass
     elif platform == 'win32':        
         here = os.path.dirname(__file__).replace('\\','/') 

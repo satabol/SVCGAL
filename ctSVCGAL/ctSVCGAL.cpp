@@ -82,7 +82,7 @@ namespace Internal = CGAL::Straight_skeleton_extrusion::internal;
 #elif __linux__
 #define DLLEXPORT 
 #elif __APPLE__
-// [ ] Implement 
+#define DLLEXPORT 
 #endif
 
 #define VAL2STR(val) #val
@@ -802,7 +802,7 @@ namespace CGAL {
 
           int contour_cursor = 0;
           for (auto& pwh1_offset : _in_vect_pwh_offset_index_order) {
-            pwh1_offset.oioa1.altitude;
+            //pwh1_offset.oioa1.altitude;
             std::vector<std::vector<Point_2>> cs;
             for (auto& pwh1 : pwh1_offset.vect_pwh) {
               cs.push_back(std::vector<Point_2>(pwh1.outer_boundary().begin(), pwh1.outer_boundary().end()));
@@ -1313,7 +1313,7 @@ namespace CGAL {
                 objects.push_back(objects_merge_mode);
               }
               if (verbose == true) {
-                printf("\n" VAL2STR(Err::_0028) ". SS 2D Offset. Source objects join mode: %i, count of objects: %I64u. ", source_objects_join_mode, objects.size() );
+                printf("\n" VAL2STR(Err::_0028) ". SS 2D Offset. Source objects join mode: %i, count of objects: %zu. ", source_objects_join_mode, objects.size() );
               }
             }
 
@@ -1996,7 +1996,7 @@ namespace CGAL {
             // 2. Отсортировать индексы по возрастанию в каждой группе
             for (auto& map_res1 : map_res_by_objectindex) {
               // Сортировать по offset_index
-              sort(map_res1.second.begin(), map_res1.second.end(), [](const OIOA& oioa1, const OIOA& oioa2) {return oioa1.offset_index < oioa1.offset_index; });
+              sort(map_res1.second.begin(), map_res1.second.end(), [](const OIOA& oioa1, const OIOA& oioa2) {return oioa1.offset_index < oioa2.offset_index; });
             }
           }
           mesh_data->nn_source_objects_count = map_res_by_objectindex.size(); // Общее значение, используется при подготовке всех выходных данных
