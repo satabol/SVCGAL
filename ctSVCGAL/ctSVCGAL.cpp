@@ -120,6 +120,9 @@ namespace CGAL {
         _0026,
         _0027,
         _0028,
+        _0029,
+        _0030,
+        _0031,
       };
 
       using K = CGAL::Exact_predicates_inexact_constructions_kernel;
@@ -1156,8 +1159,8 @@ namespace CGAL {
                           c1.reverse_orientation();
                         }
                         Polygon_2 p_hole1 = Polygon_2(c1.begin(), c1.end());
-                        // Проверить, что все точки p_hole1 находятся внутри boundary. Есть исключение, когда точки находятся внутри, но сами контуры пересекаются, но пока так, подумать над решением:
-                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+
+                        // Проверить, что все точки p_hole1 находятся внутри boundary. (есть исключение, которое рассматривается немного ниже, но точку снаружи всё ранво надо проверять. Также это может быть быстрее, чем проверять пересечения.)
                         bool is_hole_inside = true;
                         for (auto& hole1_point : p_hole1) {
                           // https://stackoverflow.com/questions/64046074/is-there-a-cgal-function-that-checks-if-a-point-is-inside-a-linear-polygon-with
@@ -1168,6 +1171,31 @@ namespace CGAL {
                         }
                         if (is_hole_inside == false) {
                           res_errors.push_back(ObjectError(I, c1, VAL2STR(Err::_0023)". Hole is not inside boundary."));
+                          continue;
+                        }
+
+                        // В продолжении проверки что точки holes находятся внутри объекта. Исключение, когда точки находятся внутри, но сами контуры пересекаются:
+                        // https://stackoverflow.com/questions/65021923/is-there-a-cgal-function-for-finding-all-intersecting-points-between-a-2d-line
+                        // https://doc.cgal.org/latest/Kernel_23/group__intersection__linear__grp.html
+                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+                        // Пример отображения такого пересечения <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale=".2"/>
+                        std::vector<Point_2> c_intersect;
+                        for (auto& boundary_edge_it = p_boundary.edges_begin(); boundary_edge_it != p_boundary.edges_end(); ++boundary_edge_it) {
+                          for (auto& hole_edge_it = p_hole1.edges_begin(); hole_edge_it != p_hole1.edges_end(); ++hole_edge_it) {
+                            const auto res = CGAL::intersection(*boundary_edge_it, *hole_edge_it);
+                            if (res) {
+                              if (const Segment_2* s = std::get_if<Segment_2>(&*res)) {
+                                c_intersect.push_back(s->point(0));
+                                c_intersect.push_back(s->point(1));
+                              } else {
+                                const Point_2* p = std::get_if<Point_2 >(&*res);
+                                c_intersect.push_back(*p);
+                              }
+                            }
+                          }
+                        }
+                        if (c_intersect.size() > 0) {
+                          res_errors.push_back(ObjectError(I, c_intersect, VAL2STR(Err::_0030)". Hole intersects with boundary."));
                           continue;
                         }
 
@@ -2488,7 +2516,7 @@ namespace CGAL {
                           c1.reverse_orientation();
                         }
                         Polygon_2 p_hole1 = Polygon_2(c1.begin(), c1.end());
-                        // Проверить, что все точки p_hole1 находятся внутри boundary. Есть исключение, когда точки находятся внутри, но сами контуры пересекаются, но пока так, подумать над решением:
+                        // Проверить, что все точки p_hole1 находятся внутри boundary. (есть исключение, которое рассматривается немного ниже, но точку снаружи всё ранво надо проверять. Также это может быть быстрее, чем проверять пересечения.)
                         // <image url="..\code_images\file_0028.png" scale=".2"/>
                         bool is_hole_inside = true;
                         for (auto& hole1_point : p_hole1) {
@@ -2503,12 +2531,37 @@ namespace CGAL {
                           continue;
                         }
 
-                        // Проверить, что он не пересекается с другими holes
+                        // В продолжении проверки что точки holes находятся внутри объекта. Исключение, когда точки находятся внутри, но сами контуры пересекаются:
+                        // https://stackoverflow.com/questions/65021923/is-there-a-cgal-function-for-finding-all-intersecting-points-between-a-2d-line
+                        // https://doc.cgal.org/latest/Kernel_23/group__intersection__linear__grp.html
+                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+                        // Пример отображения такого пересечения <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale=".2"/>
+                        std::vector<Point_2> c_intersect;
+                        for (auto& boundary_edge_it = p_boundary.edges_begin(); boundary_edge_it != p_boundary.edges_end(); ++boundary_edge_it) {
+                          for (auto& hole_edge_it = p_hole1.edges_begin(); hole_edge_it != p_hole1.edges_end(); ++hole_edge_it) {
+                            const auto res = CGAL::intersection(*boundary_edge_it, *hole_edge_it);
+                            if (res) {
+                              if (const Segment_2* s = std::get_if<Segment_2>(&*res)) {
+                                c_intersect.push_back(s->point(0));
+                                c_intersect.push_back(s->point(1));
+                              } else {
+                                const Point_2* p = std::get_if<Point_2 >(&*res);
+                                c_intersect.push_back(*p);
+                              }
+                            }
+                          }
+                        }
+                        if (c_intersect.size() > 0) {
+                          res_errors.push_back(ObjectError(I, c_intersect, VAL2STR(Err::_0031)". Hole intersects with boundary."));
+                          continue;
+                        }
+
+                        // Проверить, что hole не пересекается с другими holes: <image url="..\code_images\file_0029.png" scale=".2"/>
                         bool is_objects_intersects = false;
                         try {
                           for (auto& ap1 : allowed_contours) {
                             Polygon_2 pap1(ap1.c1->begin(), ap1.c1->end());
-                            pap1.reverse_orientation();
+                            pap1.reverse_orientation(); // Иногда такая проверка выдаёт исключение, но пока не знаю почему, поэтому она обёрнута в try/catch
                             is_objects_intersects = CGAL::do_intersect(p_hole1, pap1);
                             if (is_objects_intersects == true) {
                               break;
