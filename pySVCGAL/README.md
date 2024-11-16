@@ -29,10 +29,11 @@ To uninstall write a name (no some folder name):
 
 ## Publish/Update package on PyPi
 
-```
-python -m build
-twine upload dist/*
+1. Update version of library.
 
+```
+2. python -m build
+3. twine upload dist/*
 ```
 
 ![package_build](images/pypi_package_build.001.png)

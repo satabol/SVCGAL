@@ -134,6 +134,14 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     ctypes_in_vertices             = ctypes.ARRAY( len(vertices_list)               ,  ctypes.c_float*3 )(*[(ctypes.c_float*3)(*v1) for v1 in vertices_list ])
     
     md = None
+    new_mesh = {
+        'objects': [], # Массив объектов
+        'source_objects_errors':[], # массив ошибок по исходным объектам
+        'vertices'  : [],
+        'edges'     : [],
+        'faces'     : [],
+    }
+
     try:
         md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
@@ -159,13 +167,6 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         str_error = None
         if(mdc.str_error is not None):
             str_error = mdc.str_error.decode("ascii")
-        new_mesh = {
-            'objects': [], # Массив объектов
-            'source_objects_errors':[], # массив ошибок по исходным объектам
-            'vertices'  : [],
-            'edges'     : [],
-            'faces'     : [],
-        }
 
         # Собрать результаты, чтобы хоть что-то показать пользователю.
         new_vertices = []
@@ -281,12 +282,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         else:
             str_error = "General unexpected exception."
         str_error_summ = f"{str_error} {_ex}."
-        new_mesh = {
-            'objects'   : [],
-            'vertices'  : [],
-            'faces'     : [],
-        }
-        return new_mesh
+        print(str_error_summ)
+        raise _ex
+        #return new_mesh
 
 
 def pySVCGAL_straight_skeleton_2d_extrude(data):
@@ -381,6 +379,14 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
     ctypes_in_vertices             = ctypes.ARRAY( len(vertices_list)               ,  ctypes.c_float*3 )(*[(ctypes.c_float*3)(*v1) for v1 in vertices_list ])
 
     md = None
+    new_mesh = {
+        'objects': [], # Массив объектов
+        'source_objects_errors':[], # массив ошибок по исходным объектам
+        'vertices'  : [],
+        'edges'     : [],
+        'faces'     : [],
+    }
+
     try:
         md = straight_skeleton_2d_extrude(
             ctypes_in_count_of_objects,
@@ -403,13 +409,6 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         str_error = None
         if(mdc.str_error is not None):
             str_error = mdc.str_error.decode("ascii")
-        new_mesh = {
-            'objects': [], # Массив объектов
-            'source_objects_errors':[], # массив ошибок по исходным объектам
-            'vertices'  : [],
-            'edges'     : [],
-            'faces'     : [],
-        }
 
         # Собрать результаты
         new_vertices = []
@@ -496,7 +495,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         return new_mesh
 
     except Exception as _ex:
-        print(ex)
+        #print(_ex)
         str_error = ""
         if md is not None:
             mdc = md.contents
@@ -509,13 +508,10 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
             free_mem2(mdc)
         else:
             str_error = "General unexpected exception."
-        str_error_summ = f"{str_error} {_ex}." 
-        new_mesh = {
-            'objects'   : [],
-            'vertices'  : [],
-            'faces'     : [],
-        }
-        return new_mesh
+        str_error_summ = f"{str_error} {_ex}."
+        print(str_error_summ)
+        raise _ex
+        #return new_mesh
 
 if __name__ == "__main__":
     pass
