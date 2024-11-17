@@ -120,6 +120,10 @@ namespace CGAL {
         _0026,
         _0027,
         _0028,
+        _0029,
+        _0030,
+        _0031,
+        _0032,
       };
 
       using K = CGAL::Exact_predicates_inexact_constructions_kernel;
@@ -1093,6 +1097,7 @@ namespace CGAL {
           //try 
           {
             {
+              double intersection_timer = 0;
               // Загрузка исходных данных по объектам с некоторыми проверками.
               int plane_cursor = 0;
               int contour_cursor = 0;
@@ -1156,8 +1161,8 @@ namespace CGAL {
                           c1.reverse_orientation();
                         }
                         Polygon_2 p_hole1 = Polygon_2(c1.begin(), c1.end());
-                        // Проверить, что все точки p_hole1 находятся внутри boundary. Есть исключение, когда точки находятся внутри, но сами контуры пересекаются, но пока так, подумать над решением:
-                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+
+                        // Проверить, что все точки p_hole1 находятся внутри boundary. (есть исключение, которое рассматривается немного ниже, но точку снаружи всё ранво надо проверять. Также это может быть быстрее, чем проверять пересечения.)
                         bool is_hole_inside = true;
                         for (auto& hole1_point : p_hole1) {
                           // https://stackoverflow.com/questions/64046074/is-there-a-cgal-function-that-checks-if-a-point-is-inside-a-linear-polygon-with
@@ -1170,6 +1175,36 @@ namespace CGAL {
                           res_errors.push_back(ObjectError(I, c1, VAL2STR(Err::_0023)". Hole is not inside boundary."));
                           continue;
                         }
+
+                        // В продолжении проверки что точки holes находятся внутри объекта. Исключение, когда точки находятся внутри, но сами контуры пересекаются:
+                        // https://stackoverflow.com/questions/65021923/is-there-a-cgal-function-for-finding-all-intersecting-points-between-a-2d-line
+                        // https://doc.cgal.org/latest/Kernel_23/group__intersection__linear__grp.html
+                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+                        // Пример отображения такого пересечения <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale=".2"/>
+                        CGAL::Real_timer timer1;
+                        timer1.start();
+
+                        std::vector<Point_2> c_intersect;
+                        for (auto& boundary_edge_it = p_boundary.edges_begin(); boundary_edge_it != p_boundary.edges_end(); ++boundary_edge_it) {
+                          for (auto& hole_edge_it = p_hole1.edges_begin(); hole_edge_it != p_hole1.edges_end(); ++hole_edge_it) {
+                            const auto res = CGAL::intersection(*boundary_edge_it, *hole_edge_it);
+                            if (res) {
+                              if (const Segment_2* s = std::get_if<Segment_2>(&*res)) {
+                                c_intersect.push_back(s->point(0));
+                                c_intersect.push_back(s->point(1));
+                              } else {
+                                const Point_2* p = std::get_if<Point_2 >(&*res);
+                                c_intersect.push_back(*p);
+                              }
+                            }
+                          }
+                        }
+                        if (c_intersect.size() > 0) {
+                          res_errors.push_back(ObjectError(I, c_intersect, VAL2STR(Err::_0030)". Hole intersects with boundary."));
+                          continue;
+                        }
+                        timer1.stop();
+                        intersection_timer += timer1.time();
 
                         // Проверить, что hole не пересекается с другими holes: <image url="..\code_images\file_0029.png" scale=".2"/>
                         bool is_objects_intersects = false;
@@ -1222,6 +1257,7 @@ namespace CGAL {
                   objects.push_back(ClsObject(I, vect_ooai, planes));
                 }
               }
+              printf("\n" VAL2STR(Err::_0032) ". SS 2D Offset. Intersections boundary holes time: %.5g", intersection_timer);
             }
 
             {
@@ -2105,9 +2141,7 @@ namespace CGAL {
 
               std::vector<VECT_OIOA_PWHS> vect_pwhs_offset_index_order;
 
-              for (auto& kv : map_res_by_objectindex) {
-                int object_index = kv.first;
-                auto& res_by_object1 = kv.second;
+              for (auto& [object_index, res_by_object1] : map_res_by_objectindex) {
                 // Собрать список контуров на одном уровне offset и сложить их в нужной последовательности,
                 // чтобы они выстроились в валидную фигуру с внешним контуром и отверстиями:
                 std::map<int, std::vector<OIOA>> object1_group_contours_by_offset_index;
@@ -2151,9 +2185,6 @@ namespace CGAL {
                 int merge_object_index = 0; // Для join_mode=Merge индекс результирующего объекта один - 0, т.к. объект будет единственным.
                 int  keep_object_index = 0; // Для join_mode=KEEP индексы результирующих объектов не меняются
                 for (auto& pwhs_offset_index_order1 : vect_pwhs_offset_index_order) {
-                  //auto& res_by_object1 = KV.second;
-
-                  //int object_index = KV.first;
                   if (results_join_mode == 0) {
                     // Сгруппировать результирующие объекты по отдельным offset_index
                     // Разделить текущий набор pwhs на отдельные pwh1 и сделать каждый из них отдельным вектором (для удобства дельнейшей обработки)
@@ -2180,8 +2211,6 @@ namespace CGAL {
                     map_join_mesh[merge_object_index].push_back(pwhs_offset_index_order1);
                   }
                 }
-                // Заменить список результата на новый список результирующих объектов:
-                //map_res_by_objectindex = map_join_mesh;
               }
 
               mesh_data->nn_objects = map_join_mesh.size();
@@ -2202,9 +2231,9 @@ namespace CGAL {
               }
 
               // Время на триангуляцию тратится незначительное. Можно пока не делать распараллеливание. <image url="..\code_images\file_0023.png" scale="1.0"/>
-              for (auto& KV : map_join_mesh) {
-                int object_index = KV.first;
-                auto& vect_pwhs_with_offset_index = KV.second;
+              for (auto& [object_index, vect_pwhs_with_offset_index] : map_join_mesh) {
+                //int object_index = KV.first;
+                //auto& vect_pwhs_with_offset_index = KV.second;
 
                 std::vector<std::vector<       float>> vect_res_object1_verts; // Координаты vertices (per object1)
                 std::vector<std::vector<unsigned int>> vect_res_object1_edges; // indexes of edges (per object1)
@@ -2488,7 +2517,7 @@ namespace CGAL {
                           c1.reverse_orientation();
                         }
                         Polygon_2 p_hole1 = Polygon_2(c1.begin(), c1.end());
-                        // Проверить, что все точки p_hole1 находятся внутри boundary. Есть исключение, когда точки находятся внутри, но сами контуры пересекаются, но пока так, подумать над решением:
+                        // Проверить, что все точки p_hole1 находятся внутри boundary. (есть исключение, которое рассматривается немного ниже, но точку снаружи всё ранво надо проверять. Также это может быть быстрее, чем проверять пересечения.)
                         // <image url="..\code_images\file_0028.png" scale=".2"/>
                         bool is_hole_inside = true;
                         for (auto& hole1_point : p_hole1) {
@@ -2503,12 +2532,37 @@ namespace CGAL {
                           continue;
                         }
 
-                        // Проверить, что он не пересекается с другими holes
+                        // В продолжении проверки что точки holes находятся внутри объекта. Исключение, когда точки находятся внутри, но сами контуры пересекаются:
+                        // https://stackoverflow.com/questions/65021923/is-there-a-cgal-function-for-finding-all-intersecting-points-between-a-2d-line
+                        // https://doc.cgal.org/latest/Kernel_23/group__intersection__linear__grp.html
+                        // <image url="..\code_images\file_0028.png" scale=".2"/>
+                        // Пример отображения такого пересечения <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale=".2"/>
+                        std::vector<Point_2> c_intersect;
+                        for (auto& boundary_edge_it = p_boundary.edges_begin(); boundary_edge_it != p_boundary.edges_end(); ++boundary_edge_it) {
+                          for (auto& hole_edge_it = p_hole1.edges_begin(); hole_edge_it != p_hole1.edges_end(); ++hole_edge_it) {
+                            const auto res = CGAL::intersection(*boundary_edge_it, *hole_edge_it);
+                            if (res) {
+                              if (const Segment_2* s = std::get_if<Segment_2>(&*res)) {
+                                c_intersect.push_back(s->point(0));
+                                c_intersect.push_back(s->point(1));
+                              } else {
+                                const Point_2* p = std::get_if<Point_2 >(&*res);
+                                c_intersect.push_back(*p);
+                              }
+                            }
+                          }
+                        }
+                        if (c_intersect.size() > 0) {
+                          res_errors.push_back(ObjectError(I, c_intersect, VAL2STR(Err::_0031)". Hole intersects with boundary."));
+                          continue;
+                        }
+
+                        // Проверить, что hole не пересекается с другими holes: <image url="..\code_images\file_0029.png" scale=".2"/>
                         bool is_objects_intersects = false;
                         try {
                           for (auto& ap1 : allowed_contours) {
                             Polygon_2 pap1(ap1.c1->begin(), ap1.c1->end());
-                            pap1.reverse_orientation();
+                            pap1.reverse_orientation(); // Иногда такая проверка выдаёт исключение, но пока не знаю почему, поэтому она обёрнута в try/catch
                             is_objects_intersects = CGAL::do_intersect(p_hole1, pap1);
                             if (is_objects_intersects == true) {
                               break;
@@ -3017,8 +3071,8 @@ namespace CGAL {
               mesh_data->nn_faces = (int*)malloc(sizeof(int) * mesh_data->nn_objects);
 
               int result_index = 0;
-              for (auto& KV : map_join_mesh) {
-                mesh_data->nn_objects_indexes[result_index] = KV.first;
+              for (auto& [object_index, vect_sm] : map_join_mesh) {
+                mesh_data->nn_objects_indexes[result_index] = object_index;
 
                 //std::set   <                     int>  set_object1_offsets; // offsets (per object1)
                 std::vector<std::vector<       float>> vect_object1_verts; // Координаты vertices (per object1)
@@ -3028,10 +3082,10 @@ namespace CGAL {
                 CGAL::Real_timer timer2;
                 timer2.start();
 
-                ConvertMeshesIntoVerticesEdgesFaces(KV.second, vect_object1_verts, vect_object1_edges, vect_object1_faces);
+                ConvertMeshesIntoVerticesEdgesFaces(vect_sm, vect_object1_verts, vect_object1_edges, vect_object1_faces);
                 timer2.stop();
                 if (verbose) {
-                  printf("\nObject %i: verts - %zu, edges - %zu, faces - %zu; triangulated time - %.5g sec.", KV.first, vect_object1_verts.size(), vect_object1_edges.size(), vect_object1_faces.size(), timer2.time());
+                  printf("\nObject %i: verts - %zu, edges - %zu, faces - %zu; triangulated time - %.5g sec.", object_index, vect_object1_verts.size(), vect_object1_edges.size(), vect_object1_faces.size(), timer2.time());
                 }
                 mesh_data->nn_verts[result_index] = vect_object1_verts.size();
                 mesh_data->nn_edges[result_index] = vect_object1_edges.size();
