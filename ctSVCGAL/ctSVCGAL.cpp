@@ -123,6 +123,7 @@ namespace CGAL {
         _0029,
         _0030,
         _0031,
+        _0032,
       };
 
       using K = CGAL::Exact_predicates_inexact_constructions_kernel;
@@ -1096,6 +1097,7 @@ namespace CGAL {
           //try 
           {
             {
+              double intersection_timer = 0;
               // Загрузка исходных данных по объектам с некоторыми проверками.
               int plane_cursor = 0;
               int contour_cursor = 0;
@@ -1179,6 +1181,9 @@ namespace CGAL {
                         // https://doc.cgal.org/latest/Kernel_23/group__intersection__linear__grp.html
                         // <image url="..\code_images\file_0028.png" scale=".2"/>
                         // Пример отображения такого пересечения <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale=".2"/>
+                        CGAL::Real_timer timer1;
+                        timer1.start();
+
                         std::vector<Point_2> c_intersect;
                         for (auto& boundary_edge_it = p_boundary.edges_begin(); boundary_edge_it != p_boundary.edges_end(); ++boundary_edge_it) {
                           for (auto& hole_edge_it = p_hole1.edges_begin(); hole_edge_it != p_hole1.edges_end(); ++hole_edge_it) {
@@ -1198,6 +1203,8 @@ namespace CGAL {
                           res_errors.push_back(ObjectError(I, c_intersect, VAL2STR(Err::_0030)". Hole intersects with boundary."));
                           continue;
                         }
+                        timer1.stop();
+                        intersection_timer += timer1.time();
 
                         // Проверить, что hole не пересекается с другими holes: <image url="..\code_images\file_0029.png" scale=".2"/>
                         bool is_objects_intersects = false;
@@ -1250,6 +1257,7 @@ namespace CGAL {
                   objects.push_back(ClsObject(I, vect_ooai, planes));
                 }
               }
+              printf("\n" VAL2STR(Err::_0032) ". SS 2D Offset. Intersections boundary holes time: %.5g", intersection_timer);
             }
 
             {
