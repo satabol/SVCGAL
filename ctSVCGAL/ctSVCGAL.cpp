@@ -2141,9 +2141,7 @@ namespace CGAL {
 
               std::vector<VECT_OIOA_PWHS> vect_pwhs_offset_index_order;
 
-              for (auto& kv : map_res_by_objectindex) {
-                int object_index = kv.first;
-                auto& res_by_object1 = kv.second;
+              for (auto& [object_index, res_by_object1] : map_res_by_objectindex) {
                 // Собрать список контуров на одном уровне offset и сложить их в нужной последовательности,
                 // чтобы они выстроились в валидную фигуру с внешним контуром и отверстиями:
                 std::map<int, std::vector<OIOA>> object1_group_contours_by_offset_index;
@@ -2187,9 +2185,6 @@ namespace CGAL {
                 int merge_object_index = 0; // Для join_mode=Merge индекс результирующего объекта один - 0, т.к. объект будет единственным.
                 int  keep_object_index = 0; // Для join_mode=KEEP индексы результирующих объектов не меняются
                 for (auto& pwhs_offset_index_order1 : vect_pwhs_offset_index_order) {
-                  //auto& res_by_object1 = KV.second;
-
-                  //int object_index = KV.first;
                   if (results_join_mode == 0) {
                     // Сгруппировать результирующие объекты по отдельным offset_index
                     // Разделить текущий набор pwhs на отдельные pwh1 и сделать каждый из них отдельным вектором (для удобства дельнейшей обработки)
@@ -2216,8 +2211,6 @@ namespace CGAL {
                     map_join_mesh[merge_object_index].push_back(pwhs_offset_index_order1);
                   }
                 }
-                // Заменить список результата на новый список результирующих объектов:
-                //map_res_by_objectindex = map_join_mesh;
               }
 
               mesh_data->nn_objects = map_join_mesh.size();
@@ -2238,9 +2231,9 @@ namespace CGAL {
               }
 
               // Время на триангуляцию тратится незначительное. Можно пока не делать распараллеливание. <image url="..\code_images\file_0023.png" scale="1.0"/>
-              for (auto& KV : map_join_mesh) {
-                int object_index = KV.first;
-                auto& vect_pwhs_with_offset_index = KV.second;
+              for (auto& [object_index, vect_pwhs_with_offset_index] : map_join_mesh) {
+                //int object_index = KV.first;
+                //auto& vect_pwhs_with_offset_index = KV.second;
 
                 std::vector<std::vector<       float>> vect_res_object1_verts; // Координаты vertices (per object1)
                 std::vector<std::vector<unsigned int>> vect_res_object1_edges; // indexes of edges (per object1)
@@ -3078,8 +3071,8 @@ namespace CGAL {
               mesh_data->nn_faces = (int*)malloc(sizeof(int) * mesh_data->nn_objects);
 
               int result_index = 0;
-              for (auto& KV : map_join_mesh) {
-                mesh_data->nn_objects_indexes[result_index] = KV.first;
+              for (auto& [object_index, vect_sm] : map_join_mesh) {
+                mesh_data->nn_objects_indexes[result_index] = object_index;
 
                 //std::set   <                     int>  set_object1_offsets; // offsets (per object1)
                 std::vector<std::vector<       float>> vect_object1_verts; // Координаты vertices (per object1)
@@ -3089,10 +3082,10 @@ namespace CGAL {
                 CGAL::Real_timer timer2;
                 timer2.start();
 
-                ConvertMeshesIntoVerticesEdgesFaces(KV.second, vect_object1_verts, vect_object1_edges, vect_object1_faces);
+                ConvertMeshesIntoVerticesEdgesFaces(vect_sm, vect_object1_verts, vect_object1_edges, vect_object1_faces);
                 timer2.stop();
                 if (verbose) {
-                  printf("\nObject %i: verts - %zu, edges - %zu, faces - %zu; triangulated time - %.5g sec.", KV.first, vect_object1_verts.size(), vect_object1_edges.size(), vect_object1_faces.size(), timer2.time());
+                  printf("\nObject %i: verts - %zu, edges - %zu, faces - %zu; triangulated time - %.5g sec.", object_index, vect_object1_verts.size(), vect_object1_edges.size(), vect_object1_faces.size(), timer2.time());
                 }
                 mesh_data->nn_verts[result_index] = vect_object1_verts.size();
                 mesh_data->nn_edges[result_index] = vect_object1_edges.size();
