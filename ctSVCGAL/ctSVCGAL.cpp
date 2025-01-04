@@ -33,7 +33,7 @@
 #include <CGAL/draw_surface_mesh.h>
 
 //#include "CGAL/input_helpers.h" // polygon reading, random polygon with weights generation
-#include <CGAL/extrude_skeleton.h>
+#include "extrude_skeleton.h"
 
 #include <CGAL/IO/polygon_mesh_io.h>
 #include <CGAL/create_offset_polygons_from_polygon_with_holes_2.h>
@@ -493,16 +493,6 @@ namespace CGAL {
           NamedParameters,
           Default_kernel>::type;
         using Vb = CGAL::Triangulation_vertex_base_with_info_2<std::size_t, Geom_traits>;
-        //typedef CGAL::Constrained_triangulation_face_base_2<K>            Fb;
-        //typedef CGAL::Triangulation_data_structure_2<Vb, Fb>               TDS;
-        //typedef CGAL::Exact_predicates_tag                                Itag;
-        //typedef CGAL::Constrained_Delaunay_triangulation_2<K, TDS, Itag>  CDT;
-        //typedef CDT::Face_handle                                          Face_handle;
-        //typedef CDT::Point                                                Point;
-        //typedef std::pair<Face_handle, int> Edge;
-        //using CDT_Vertex_handle = typename CDT::Vertex_handle;
-        //using CDT_Face_handle = typename CDT::Face_handle;
-
         using Fb = CGAL::Constrained_triangulation_face_base_2<Geom_traits>;
         using TDS = CGAL::Triangulation_data_structure_2<Vb, Fb>;
         using Itag = CGAL::No_constraint_intersection_requiring_constructions_tag;
@@ -513,8 +503,6 @@ namespace CGAL {
 
 
         CDT cdt;
-
-        //std::map<int, Polygon_2> invalid_contours;
 
 //        try {
           bool was_polygon_exception = false;
@@ -751,6 +739,9 @@ namespace CGAL {
           // Этот тип имеет смысл только при описании полигона с отрицательным offset
           enum NEGATIVE_TYPE {
             WITH_EXTERNAL_FRAME,
+            /// <summary>
+            /// Используется при обработке отрицательного offset, когда элемент исходного контура является отверстием в исходном mesh. См. цикл рассчёта External Frame при отрицательном offset.
+            /// </summary>
             INVERTED_HOLE,
           } neg_type;
 
@@ -989,6 +980,8 @@ namespace CGAL {
         /// рассчётные объекты, но уже с новыми параметрами. После этого производится расчёт в параллель всех Skeleton-ов, потом производится расщепление на
         /// цикла на рассчёт независимых offset для каждого Straight Skeleton. Результат возвращается пользователю в виде meshes (Edges или Faces), соответствующих исходным объектам.
         /// <image url="..\code_images\file_0031.png" scale="1.0"/>
+        /// Неочевидный корректный результат для mode faces:
+        /// <image url="F:\Enternet\2024\24.11.10\SVCGAL\ctSVCGAL\code_images\file_0033.png" scale="1.0"/>
         /// </summary>
         /// <param name="in_polygon_id"></param>
         /// <param name="in_offset"></param>
@@ -1053,7 +1046,10 @@ namespace CGAL {
           // Типы результатов, которые будут возвращены пользователю после расчётов - контуры или Faces
           // <image url="..\code_images\file_0027.png" scale=".2"/>
           enum ResType {
-            EDGES, FACES
+            EDGES,
+            FACES,
+            EXTRUDE,  // Последовательная заливка боковых поверхностей при переходе от одного offset к другому с учётом перепада высот (altitudes). По сути - почти Bevel, только с учётом алгоритма Traight Skeleton.
+                      // см. функцию construct_lateral_faces. Тонкость в работе - возможны отрицательные altitudes
           }result_type;
 
           if (in_res_type == ResType::EDGES) {
@@ -1554,7 +1550,7 @@ namespace CGAL {
                         // Дополнительно - запоминать кто из контуров использовался в качестве определяющего внешний контур тут уже не важно (может в будущем и понадобиться, но прямо сейчас не нужно)
 
                         // Если при расчёте отрицательного offset буду обнаружены инвертированные holes, то для рассчёта таких инвертированных holes можно будет использовать хак:
-                        // Контуры можно посчитать только положительные. Но раз инвертированные holes являются замкнутыми, то их теперь можно посчитать на равне с положительными,
+                        // Контуры можно посчитать только положительные. Но раз инвертированные holes являются замкнутыми, то их теперь можно посчитать наравне с положительными,
                         // для этого нужно инвертировать негативное значение отступа, а altitude оставить таким же, как было. И всё это "упаковать" как новый объект.
                         // <image url="..\code_images\file_0013.png" scale=".5"/>
 
@@ -1661,6 +1657,7 @@ namespace CGAL {
                           // Рассчитать вспомогательный внешний Frame для расчёта наибольшего отрицательного offset, в который войдут все внешние объекты.
                           // <image url="..\code_images\file_0009.png" scale=".2"/>
                           {
+                            // std::min_element - потому что ищем максимум отрицательного отступа. Соответственно максимальное значение по модулю будет у минимального отрицательного элемента (-20, -5, -1, -10) - максимальное отрицательное числе =-20.
                             double max_abs_negative_offset = abs(std::min_element(object1NegativeOffsetSS.object1.vect_oioa.begin(), object1NegativeOffsetSS.object1.vect_oioa.end(), [](const OIOA& o1, const OIOA& o2) { return o1.offset < o2.offset; })->offset);
                             std::vector<double> vxmin, vymin, vxmax, vymax;
                             ContourSequence allowed_polygons; // Для каких полигонов удалось вычислить margin
@@ -1751,7 +1748,7 @@ namespace CGAL {
                           }
 
                           {
-                            // Если в объекте есть не только отрицательные offsets, но и положительные, то нужно и задать параметры для их расчёта тоже:
+                            // Если в объекте есть не только отрицательные offsets, но и положительные, то нужно задать параметры и для их расчёта тоже:
                             std::vector<OIOA> vect_oioa;
                             for (auto& oioa1 : object1NegativeOffsetSS.object1.vect_oioa) {
                               if (oioa1.offset >= 0) {
@@ -1857,21 +1854,22 @@ namespace CGAL {
                 }
                 pool3.join();
 
+                // Рассчитать offset-ы в многопоточном режиме для всех SS
                 boost::asio::thread_pool pool4(threadNumbers);
                 for (POMS& polygon1_oioa : vect_polygon1_oioa) {
                   if (polygon1_oioa.ss) {
                     for (auto& oioa1 : polygon1_oioa.oioa) {
 #ifdef _DEBUG
-                      // Пропускать offset == 0 при отладке. Срабатывает проверка на 0 в offset skeleton, хотя сам skeleton при 0 строится нормально
+                      // Пропускать offset == 0 в Solution Configuration = _DEBUG, т.к. в _DEBUG срабатывает проверка на 0 в offset skeleton, хотя сам skeleton при 0 в Release строится нормально
                       if (is_zero(oioa1.offset)) {
                         continue;
                       }
 #endif
                       boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &mtx_, &res_contours] {
-                        ContourSequence offset_contours; // Instantiate the container of offset contours
-                        OffsetBuilder ob(*polygon1_oioa.ss); // Instantiate the offset builder with the skeleton
+                        ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset.
+                        OffsetBuilder offsetBuilder(*polygon1_oioa.ss); // Instantiate the offset builder with the skeleton
 
-                        ob.construct_offset_contours(abs(oioa1.offset)/*Здесь считаются и отрицательные offsets для внешних контуров, но данные подготовлены для инверсии*/, std::back_inserter(offset_contours)); // Obtain the offset contours
+                        offsetBuilder.construct_offset_contours(abs(oioa1.offset)/*Здесь считаются и отрицательные offsets для внешних контуров, но данные подготовлены для инверсии*/, std::back_inserter(offset_contours)); // Obtain the offset contours
 
                         // Ещё вариант конфигурации контуров, которые требуется идентифицировать при сопоставлении контуров (т.е. и количество контуров меняется и результирующие фигуры тоже меняются):
                         // TODO: Нужно разобраться где разбираться с конфигурацией. Тут разобраться не получится, потому что расчёт с положительным offset (хоть он тут и берётся через abs)
@@ -1914,10 +1912,10 @@ namespace CGAL {
                           } else {
                             if (oioa1.neg_type == OIOA::NEGATIVE_TYPE::WITH_EXTERNAL_FRAME) {
                               // Если offset отрицательный, и отмечен признаком WITH_EXTERNAL_FRAME, то у такого offset не загружать внешний контур, 
-                              // т.к. он является вспомогательным для рассчётов и не должен отображаться.
+                              // т.к. он является вспомогательным для рассчётов и не должен отображаться/выводится в результат.
                               // Locate the offset contour that corresponds to the frame
                               // That must be the outmost offset contour, which in turn must be the one
-                              // with the largetst unsigned area.
+                              // with the largest unsigned area.
                               ContourSequence::iterator f = offset_contours.end();
                               double lLargestArea = 0.0;
                               for (ContourSequence::iterator i = offset_contours.begin(); i != offset_contours.end(); ++i) {
@@ -1927,7 +1925,7 @@ namespace CGAL {
                                   lLargestArea = lArea;
                                 }
                               }
-                              // Remove the offset contour that corresponds to the frame.
+                              // Remove the offset contour that corresponds to the frame max area.
                               offset_contours.erase(f);
                             }
 
