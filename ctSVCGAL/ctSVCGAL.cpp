@@ -490,8 +490,8 @@ namespace CGAL {
 
         using Default_kernel = typename Kernel_traits<Point>::type;
         using Geom_traits = typename internal_np::Lookup_named_param_def<internal_np::geom_traits_t,
-          NamedParameters,
-          Default_kernel>::type;
+                                                                                      NamedParameters,
+                                                                                      Default_kernel>::type;
         using Vb = CGAL::Triangulation_vertex_base_with_info_2<std::size_t, Geom_traits>;
         using Fb = CGAL::Constrained_triangulation_face_base_2<Geom_traits>;
         using TDS = CGAL::Triangulation_data_structure_2<Vb, Fb>;
@@ -618,9 +618,9 @@ namespace CGAL {
         /// <summary>
         /// Преобразовать PolygonWithHoles2 в Mesh (полигональный mesh)
         /// </summary>
-        /// <param name="pwh1"></param>
-        /// <param name="altitude"></param>
-        /// <param name="sm1"></param>
+        /// <param name="pwh1">[in] Входной полигон PWH (Polygon with Holes)</param>
+        /// <param name="altitude">[in] Высота, на которой надо разместить mesh</param>
+        /// <param name="sm1">[out] Результирующая Mesh</param>
         static bool ConvertPolygonWithHoles2IntoMesh(CGAL::Straight_skeleton_extrusion::internal::Polygon_with_holes_2& pwh1, double altitude, Mesh& sm1) {
           std::vector<Point_3> polygon_points;
           std::vector<std::vector<std::size_t> > polygon_faces;
@@ -731,11 +731,15 @@ namespace CGAL {
 
         // Object Index, Offset, Altitude, Polygon. Сопоставленные objects, planes, offsets, altitudes и помнить порядок в котором заданы offsets:
         struct OIOA {
+          using HDS = typename Straight_skeleton_2::Base;
+          using HDS_Vertex_const_handle = typename HDS::Vertex_const_handle;
+          using HDS_Halfedge_const_handle = typename HDS::Halfedge_const_handle;
+
           int object_index;
           int offset_index;
 
-          double offset;
-          double altitude;
+          FT offset;
+          FT altitude;
           // Этот тип имеет смысл только при описании полигона с отрицательным offset
           enum NEGATIVE_TYPE {
             WITH_EXTERNAL_FRAME,
@@ -749,7 +753,12 @@ namespace CGAL {
           //std::vector<Contour> polygon_contours;
           ContourSequence polygon_contours;
 
-          OIOA(int _object_index, int _offset_index, double _offset, double _altitude) {
+          /// <summary>
+          /// Отображение HalfEdge на точку пересечения с offset
+          /// </summary>
+          std::unordered_map<HDS_Halfedge_const_handle, Point_2> map_halfedge_to_offset_points;
+
+          OIOA(int _object_index, int _offset_index, FT _offset, FT _altitude) {
             object_index = _object_index;
             offset_index = _offset_index;
             offset = _offset;
@@ -757,7 +766,7 @@ namespace CGAL {
             neg_type = NEGATIVE_TYPE::INVERTED_HOLE;
           }
 
-          OIOA(int _object_index, int _offset_index, double _offset, NEGATIVE_TYPE _neg_type, double _altitude) {
+          OIOA(int _object_index, int _offset_index, FT _offset, NEGATIVE_TYPE _neg_type, FT _altitude) {
             object_index = _object_index;
             offset_index = _offset_index;
             offset = _offset;
@@ -779,10 +788,10 @@ namespace CGAL {
         /// <summary>
         /// Конвертировать набор Polygon_with_holes_2 в наборы контуров в виде полигональной сетки vertices, edges, faces, но faces отсутствуют, но этот параметр нужен полигональной сетке.
         /// </summary>
-        /// <param name="_vect_sm_in"></param>
-        /// <param name="vect_object1_verts"></param>
-        /// <param name="vect_object1_edges"></param>
-        /// <param name="vect_object1_faces"></param>
+        /// <param name="_vect_sm_in">[in] Входной набор полигонов</param>
+        /// <param name="vect_object1_verts">[out] Результат verts</param>
+        /// <param name="vect_object1_edges">[out] Результат edges</param>
+        /// <param name="vect_object1_faces">[out] Результат faces</param>
         static void ConvertPWH2IntoVerticesEdgesNoFaces(
           std::vector<VECT_OIOA_PWHS> _in_vect_pwh_offset_index_order,
           std::vector<std::vector<float>>& _vect_object1_verts_out,
@@ -1020,6 +1029,12 @@ namespace CGAL {
            int results_join_mode,           // Что сделать с полученными mesh: # 0 - split - разделить на отдельные mesh-объекты, 1 - keep - оставить в своих объектах, 2 - merge all meshes - объеденить в один большой объект. В этом ноде дополнительные параметры к объектам не нужны
           bool verbose                     // Подробный вывод
         ) {
+
+          using HDS = typename Straight_skeleton_2::Base;
+          using HDS_Vertex_const_handle = typename HDS::Vertex_const_handle;
+          using HDS_Halfedge_const_handle = typename HDS::Halfedge_const_handle;
+          using HDS_Face_handle = typename HDS::Face_handle;
+
           if (verbose == true) {
 #ifdef _DEBUG
             printf("\nstraight_skeleton_2d_offset in DEBUG MODE");
@@ -1583,8 +1598,8 @@ namespace CGAL {
                             stack_cs.push_back(cs1);
                           }
 
-                          // Отсортировать полигоны в топологической последовательности. 
-                          // Перед расчётом важно убедиться, что если какой-то полигон вложен в другой полигон, то такие полигоны не могут использоваться вместе для рассчёта external offset
+                          // Отсортировать полигоны в топологической последовательности по вложенности. 
+                          // Перед расчётом важно убедиться, что если какой-то полигон вложен в другой полигон, то такие вложенные полигоны не должны использоваться вместе для рассчёта external offset
                           // (Во-первых внешний и так больше, а во вторых функция construct_skeleton входит в бесконечный цикл, если передать объект с такой топологией).
                           // Они должны быть преобразованы в инвертированные holes (т.е. стать островами)
                           // Если предположить, что все объекты отделены друг от друга условной "водой", т.е. между внутренней границей одного объекта и внутренней границей другого всегда есть расстояние,
@@ -1617,7 +1632,7 @@ namespace CGAL {
                               ContourPtr& vcfp_I0 = stack_cs[I][0];
                               // В OUTER контуры ничего добавлять на нужно. Только они добавляются в HOLE-контуры.
                               if (vcfp_I0->is_counterclockwise_oriented() == true) {
-                                bool is_parent_hole_found = false;
+                                bool is_parent_hole_found = false; // Изначально предполагается, что рассматриваемый контур является самым внешним, который никуда не вложен.
                                 if (stack_cs.size() > 2) {
                                   Point_2 p0_I0 = vcfp_I0->vertices().at(0);
                                   for (int IJ = stack_cs.size() - 2; IJ >= 0; IJ--) {
@@ -1652,7 +1667,7 @@ namespace CGAL {
                                 break;
                               }
                             }
-                          }
+                          } // while (stack_cs.size() > 0) 
 
                           // Рассчитать вспомогательный внешний Frame для расчёта наибольшего отрицательного offset, в который войдут все внешние объекты.
                           // <image url="..\code_images\file_0009.png" scale=".2"/>
@@ -1682,6 +1697,7 @@ namespace CGAL {
                               double ymin = *std::min_element(vymin.begin(), vymin.end());
                               double xmax = *std::max_element(vxmax.begin(), vxmax.end());
                               double ymax = *std::max_element(vymax.begin(), vymax.end());
+                              // Внешний контур для охвата всех вложенных контуров (виртуальный контур, который позже будет использован для построения отрицательного offset)
                               ContourPtr frame_outer_boundary = std::make_shared<Contour>();
                               frame_outer_boundary->push_back(Point_2(xmin, ymin));
                               frame_outer_boundary->push_back(Point_2(xmax, ymin));
@@ -1689,6 +1705,7 @@ namespace CGAL {
                               frame_outer_boundary->push_back(Point_2(xmin, ymax));
                               // <image url="..\code_images\file_0011.png" scale=".2"/>
 
+                              // Собрать контуры вместе, чтобы потом построить из них SS с отрицательным offset.
                               ContourSequence cs_frame;
                               cs_frame.push_back(frame_outer_boundary);
                               std::shared_ptr<Polygon_with_holes_2> main_outer_negative_offset_polygon = std::make_shared<Polygon_with_holes_2>(Polygon_2(frame_outer_boundary->begin(), frame_outer_boundary->end()));
@@ -1811,6 +1828,16 @@ namespace CGAL {
                     SsBuilder ssb;
                     int verts_count = polygon1_oioa.polygon1_with_holes->outer_boundary().size();
                     {
+                      // TODO: Временный параметр для равномерного offset. надо будет добавить weight во входные сокеты нода и заменить на получение weight из интерфейса нода
+                      std::vector<std::vector<FT> > uniform_weights;
+                      uniform_weights.reserve(polygon1_oioa.polygon1_with_holes->number_of_holes() + 1);
+
+                      uniform_weights.push_back(std::vector<FT>(polygon1_oioa.polygon1_with_holes->outer_boundary().size(), FT(1)));
+                      for (const auto& hole : polygon1_oioa.polygon1_with_holes->holes())
+                        uniform_weights.push_back(std::vector<FT>(hole.size(), FT(1)));
+
+
+
                       // Загрузить outer boundary и holes в ssb.
 
                       // Загрузить внешний контур:
@@ -1820,6 +1847,7 @@ namespace CGAL {
                         verts_count += hole1.size();
                         ssb.enter_contour(hole1.begin(), hole1.end());
                       }
+                      //ssb.enter_contour_weights(uniform_weights.begin(), uniform_weights.end());
                     }
                     // Construct the skeleton
                     CGAL::Real_timer timer1;
@@ -1865,11 +1893,13 @@ namespace CGAL {
                         continue;
                       }
 #endif
-                      boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &mtx_, &res_contours] {
-                        ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset.
-                        OffsetBuilder offsetBuilder(*polygon1_oioa.ss); // Instantiate the offset builder with the skeleton
+                      boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &mtx_, &verbose, &res_contours] {
+                        ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset. На один offset может быть несколько контуров.
+                        //std::unordered_map<HDS_Halfedge_const_handle, Point_2> map_halfedge_to_offset_points; // Сопоставление точек пересечения offset с SS по halfedge.
+                        //OffsetBuilder offsetBuilder(*polygon1_oioa.ss); // Instantiate the offset builder with the skeleton
+                        //offsetBuilder.construct_offset_contours(abs(oioa1.offset)/*Здесь считаются и отрицательные offsets для внешних контуров, но данные подготовлены для инверсии, это учтётся позже*/, std::back_inserter(offset_contours)); // Obtain the offset contours
 
-                        offsetBuilder.construct_offset_contours(abs(oioa1.offset)/*Здесь считаются и отрицательные offsets для внешних контуров, но данные подготовлены для инверсии*/, std::back_inserter(offset_contours)); // Obtain the offset contours
+                        CGAL::offset_params(polygon1_oioa.ss, oioa1.offset, CGAL::parameters::verbose(verbose), oioa1.map_halfedge_to_offset_points, std::back_inserter(offset_contours));
 
                         // Ещё вариант конфигурации контуров, которые требуется идентифицировать при сопоставлении контуров (т.е. и количество контуров меняется и результирующие фигуры тоже меняются):
                         // TODO: Нужно разобраться где разбираться с конфигурацией. Тут разобраться не получится, потому что расчёт с положительным offset (хоть он тут и берётся через abs)
@@ -2146,8 +2176,8 @@ namespace CGAL {
                 // Как работает join_mode <image url="..\code_images\file_0024.png" scale=".2"/>. Для режима EDGES всё тоже самое, только выводятся только контуры соответствующего face без триангуляции (с учётом holes)
                 // и с учётом направленности - внешние контуры закручены против часовой, а внутренние holes закручены по часовой: <image url="..\code_images\file_0025.png" scale=".2"/>
                 int split_object_index = 0; // для join_mode==SPLIT индекс нового объекта назначается группе контуров с одним index_offset (а не каждому контуру, чтобы количество объектов в режиме Edges и Faces совпадало)
-                int merge_object_index = 0; // Для join_mode=Merge индекс результирующего объекта один - 0, т.к. объект будет единственным.
-                int  keep_object_index = 0; // Для join_mode=KEEP индексы результирующих объектов не меняются
+                int merge_object_index = 0; // Для join_mode==MERGE индекс результирующего объекта один - 0, т.к. объект будет единственным.
+                int  keep_object_index = 0; // Для join_mode==KEEP  индексы результирующих объектов не меняются
                 for (auto& pwhs_offset_index_order1 : vect_pwhs_offset_index_order) {
                   //auto& res_by_object1 = KV.second;
 
@@ -2218,6 +2248,7 @@ namespace CGAL {
                   ConvertPWH2IntoVerticesEdgesNoFaces(vect_pwhs_with_offset_index, vect_res_object1_verts, vect_res_object1_edges, vect_res_object1_faces);
                 } else if (result_type == ResType::FACES) {
                   std::vector<Mesh> vect_sm_offset_index_order;
+                  // Преобразовать вектор PWH полигонов в соответствующий вектор mesh
                   for (auto& pwh_altitude : vect_pwhs_with_offset_index) {
                     for (auto& pwh1 : pwh_altitude.vect_pwh) {
                       Mesh sm1;
@@ -2225,7 +2256,7 @@ namespace CGAL {
                       vect_sm_offset_index_order.push_back(sm1);
                     }
                   }
-                  // Из набора Mesh надо сформировать полигональную сетку
+                  // Из вектора Mesh-ей надо сформировать полигональную сетку
                   ConvertMeshesIntoVerticesEdgesFaces(vect_sm_offset_index_order, vect_res_object1_verts, vect_res_object1_edges, vect_res_object1_faces);
                 }
 

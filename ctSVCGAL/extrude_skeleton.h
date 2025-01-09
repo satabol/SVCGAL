@@ -328,6 +328,27 @@ public:
   ////////////////////////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////////////////////////////
   ////////////////////////////////////////////////////////////////////////////////////////////////////
+  template<typename NamedParameters = parameters::Default_named_parameters
+  >
+  bool offset_params(Straight_skeleton_2_ptr ss_ptr,
+    const FT vertical_weight, // Это offset
+    std::unordered_map<HDS_Halfedge_const_handle, Point_2>& offset_points,
+    std::back_insert_iterator<std::vector<std::shared_ptr<Polygon_2>>> raw_output,
+    const NamedParameters& np = parameters::default_values()) {
+    if (!ss_ptr) {
+      std::cerr << "Error: encountered an error during skeleton construction" << std::endl;
+      return false;
+    }
+#ifdef CGAL_SLS_SNAP_TO_VERTICAL_SLABS
+    std::map<Point_2, Point_2> snapped_positions;
+    Visitor visitor(*ss_ptr, offset_points, abs(vertical_weight) /*Отступ всегда положительный, т.к. SS рассчитывается с учётом внешнего Frame для отрицательных offset*/, snapped_positions);
+#else
+    Visitor visitor(*ss_ptr, vertical_weight, offset_points);
+#endif
+    Offset_builder ob(*ss_ptr, Offset_builder_traits(), visitor);
+    ob.construct_offset_contours(abs(vertical_weight), raw_output);
+    return true;
+  }
 
   template <typename PolygonWithHoles,
             typename PointRange, typename FaceRange>
@@ -506,6 +527,20 @@ public:
     }
   }
 
+
+  /// <summary>
+  /// Построение боковых стенок между исходной фигурой и положительным offset.
+  /// </summary>
+  /// <param name="ss">[in] Уже рассчитанный Straight Skeleton (SS)</param>
+  /// <param name="offset_builder">[in] Заданный offset builder</param>
+  /// <param name="height">[in] Требуемая высота для Extrude</param>
+  /// <param name="points"></param>
+  /// <param name="faces"></param>
+  /// <param name="offset_points"></param>
+  /// <param name="vertical_weight"></param>
+  /// <param name="snapped_positions"></param>
+  /// <param name="ignore_frame_faces"></param>
+  /// <param name="invert_faces"></param>
   void construct_lateral_faces(const Straight_skeleton_2& ss,
                               const Offset_builder& offset_builder,
                               const FT height,
@@ -514,10 +549,11 @@ public:
                               const std::unordered_map<HDS_Halfedge_const_handle, Point_2>& offset_points,
 #ifdef CGAL_SLS_SNAP_TO_VERTICAL_SLABS
                               const FT& vertical_weight,
-                              std::map<Point_2, Point_2>& snapped_positions,
+                              std::map<Point_2, Point_2>& snapped_positions, // Пока не разобрался что это
 #endif
-                              const bool ignore_frame_faces = false,
-                              const bool invert_faces = false)
+                              const bool ignore_frame_faces = false,  // Игнорировать внешний контур при отрицательных offset (отрицательный отступ, за пределы контура)
+                              const bool invert_faces = false         // Инвертировать результат по faces
+  )
   {
     CGAL_precondition(height != default_extrusion_height<FT>());
 
@@ -527,15 +563,22 @@ public:
     const HDS& hds = static_cast<const HDS&>(ss);
 
     std::size_t fc = 0;
+    std::size_t faces_counter = 0;
+    std::size_t face_points_size = 0;
     for(const HDS_Face_handle hds_f : CGAL::faces(hds))
     {
       // If they exist (exterior skeleton), the first four faces of the SLS correspond
       // to the outer frame, and should be ignored.
+      // Frame faces - внешний frame при отрицательном offset. Добавляется как внешний прямоугольник (у которого 4 faces, те самые fc++<4) для расчёта отрицательного offset,
+      // а при построении боковых faces этого внешнего прямоугольника требуется пропустить.
+      // <image url="..\code_images\file_0034.png" scale="1.0"/>
       if(ignore_frame_faces && fc++ < 4)
         continue;
+      faces_counter++;
 
       std::vector<Point_3> face_points;
 
+      // Если я правильно понял, то hds_h - полуребро Straight Skeleton, которое рассматривается в настоящий момент.
       HDS_Halfedge_const_handle hds_h = hds_f->halfedge(), done = hds_h;
 
 #ifdef CGAL_SLS_SNAP_TO_VERTICAL_SLABS
@@ -543,61 +586,78 @@ public:
       CGAL_assertion(hds_h == contour_h);
       const bool is_vertical = (contour_h->weight() == vertical_weight);
 #endif
-
+      int verts_counter=0;
       do
       {
-        HDS_Vertex_const_handle hds_sv = hds_h->opposite()->vertex();
-        HDS_Vertex_const_handle hds_tv = hds_h->vertex();
+        // <image url="..\code_images\file_0035.png" scale="1.0"/>
+        HDS_Vertex_const_handle hds_vert_opposite = hds_h->opposite()->vertex();
+        HDS_Vertex_const_handle hds_vert_current = hds_h->vertex();
+        verts_counter++;
 
         // Compare_offset_against_event_time compares offset to node->time(),
         // so when the offset is greater or equal than the node->time(), the node is the face
+        // time - из терминов Straight Skeleton - время наступления события слияния двух волн
+        // Находится ли вершина Straight Skeleton ближе к исходному контуру Straight Skeleton, чем точка offset?
+        // Если time ближе в исходному контуру, чем height, то результат CGAL::LARGER, если дальше, чем height,
+        // то CGAL::SMALLER или CGAL::EQUAL.
         auto compare_time_to_offset = [&](HDS_Vertex_const_handle node) -> CGAL::Comparison_result
         {
-          if(node->is_contour())
-            return CGAL::LARGER; // offset > 0 and contour nodes' time is 0
+          // <image url="..\code_images\file_0037.png" scale="1.0"/>
+          if(node->is_contour()) // Если указанная вершина принадлежит контуру, то это означает, что вершина выигрывает в любом случае.
+            return CGAL::LARGER; // offset > 0 and contour nodes' time is 0 (Очень странно, что принимается CGAL::LARGER при time равном 0)
           else
-            return offset_builder.Compare_offset_against_event_time(abs_height, node);
+            return offset_builder.Compare_offset_against_event_time(abs_height, node); // Кто ближе к внешнему контуру? height, полученный по offset или указанная вершина node
         };
 
-        const CGAL::Comparison_result sc = compare_time_to_offset(hds_sv);
-        const CGAL::Comparison_result tc = compare_time_to_offset(hds_tv);
+        // <image url="..\code_images\file_0036.png" scale="1.0"/>
+        // По сути  Нужно разделить face of Straight Skeleton и оставить только нижний участок ниже height из face
+        const CGAL::Comparison_result comp_time_opposite = compare_time_to_offset(hds_vert_opposite);
+        const CGAL::Comparison_result comp_time_current  = compare_time_to_offset(hds_vert_current);
 
         // if the offset is crossing at the source, it will be added when seen as a target
         // from the previous halfedge
-
-        if(sc != tc && sc != CGAL::EQUAL && tc != CGAL::EQUAL)
+        // Если рассматриваемая точка и предыдущая точка находятся по разные стороны от линии height, то нужно найти точку на уровне height,
+        // которая пересекается с рассматриваемой edge (из набора offset_points).
+        if(comp_time_opposite != comp_time_current && comp_time_opposite != CGAL::EQUAL && comp_time_current != CGAL::EQUAL)
         {
           // std::cout << "sc != tc" << std::endl;
-          CGAL_assertion(sc != CGAL::EQUAL && tc != CGAL::EQUAL);
+          CGAL_assertion(comp_time_opposite != CGAL::EQUAL && comp_time_current != CGAL::EQUAL);
 
           HDS_Halfedge_const_handle hds_off_h = hds_h;
+          auto off_p_0 = offset_points.find(hds_off_h);
+          // Не понимаю, что делает это условие:
           if(hds_h->slope() == CGAL::NEGATIVE) // ensure same geometric point on both sides
             hds_off_h = hds_off_h->opposite();
 
           // The offset point must already been computed in the offset builder visitor
+          // Найти точку пересечения контура offset с рассматриваемой halfedge от Straight Skeleton.
           auto off_p = offset_points.find(hds_off_h);
           CGAL_assertion(off_p != offset_points.end());
 
           face_points.emplace_back(off_p->second.x(), off_p->second.y(), height);
         }
 
-        if(tc != CGAL::SMALLER)
+        if(comp_time_current != CGAL::SMALLER)
         {
 #ifdef CGAL_SLS_SNAP_TO_VERTICAL_SLABS
-          if(is_vertical && !hds_tv->is_contour())
+          if(is_vertical && !hds_vert_current->is_contour())
             snap_skeleton_vertex<HDS, Geom_traits>(hds_h, contour_h, snapped_positions);
 #endif
 
-          const Point_2& off_p = hds_tv->point();
+          const Point_2& off_p = hds_vert_current->point();
           // ->time() could be an approximation of the true time. If we are here, the target's time
           // is smaller than the height, but we still sanitize it in case of numerical errors in ->time().
-          const FT time = boost::algorithm::clamp(hds_tv->time(), FT(0), abs_height);
+          const FT time = boost::algorithm::clamp(hds_vert_current->time(), FT(0), abs_height);
           face_points.emplace_back(off_p.x(), off_p.y(), extrude_upwards ? time : - time);
+        }
+        if (face_points.size() > 0) {
+          face_points_size = face_points.size();
         }
 
         hds_h = hds_h->next();
       }
       while(hds_h != done);
+      std::cerr << faces_counter <<  ". verts_counter=" << verts_counter << ", face_points_size=" << face_points_size;
 
       if(face_points.size() < 3)
       {
@@ -610,6 +670,7 @@ public:
   }
 
 public:
+
   // this is roughly "CGAL::create_interior_weighted_skeleton_and_offset_polygons_with_holes_2()",
   // but we want to know the intermediate straight skeleton to build the lateral faces of the 3D mesh
   template <typename PolygonWithHoles,
@@ -645,7 +706,7 @@ public:
     // @partial_wsls_pwh interior SLS of weighted polygons with holes can have skeleton faces with holes
     // The current postprocessing is in the function EnforceSimpleConnectedness, but it has not yet
     // been made compatible with partial skeletons.
-    if(is_default_extrusion_height || pwh.number_of_holes() != 0)
+    if(true || is_default_extrusion_height || pwh.number_of_holes() != 0)
     {
       ss_ptr = CGAL::create_interior_weighted_straight_skeleton_2(
                  CGAL_SS_i::vertices_begin(pwh.outer_boundary()),
@@ -658,7 +719,7 @@ public:
     else
     {
       ss_ptr = CGAL_SS_i::create_partial_interior_weighted_straight_skeleton_2(
-                 abs_height,
+                 abs_height, // Максимальная высота/отступ, до которой надо построить SS
                  CGAL_SS_i::vertices_begin(pwh.outer_boundary()),
                  CGAL_SS_i::vertices_end(pwh.outer_boundary()),
                  pwh.holes_begin(), pwh.holes_end(),
@@ -1136,6 +1197,54 @@ bool extrude_skeleton(const Polygon& p,
 
   return extrude_skeleton(Polygon_with_holes(p), out, np);
 }
+
+/// <summary>
+/// Подготовка параметров для Extrude по заданным offsets.
+/// </summary>
+/// <typeparam name="StraightSkeleton_2"></typeparam>
+/// <typeparam name="HDS_Halfedge_const_handle"></typeparam>
+/// <typeparam name="Point_2"></typeparam>
+/// <typeparam name="Polygon_2"></typeparam>
+/// <typeparam name="NamedParameters"></typeparam>
+/// <typeparam name="FT"></typeparam>
+/// <param name="ss_ptr">Задаваемый уже рассчитанный Straight Skeleton (SS)</param>
+/// <param name="offset">Задаваемый отступ offset от края (должен быть положительным, т.к. все SS рассчитываются с учётом отрицательного offset)</param>
+/// <param name="np">Дополнительные входные именованные параметры (пока передаётся только verbose)</param>
+/// <param name="offset_points">Возвращаемый список точек пересечения offset с полуребром (возможно, что не все полурёбра будут пересекаться с offset, поэтому количество точек пересечения может быть меньше количества полурёбер SS)</param>
+/// <param name="raw_output">Выходной вектор полигонов PWH для заданного offset (результатом offset может быть как несколько полигонов, так и ни одного. Нет связи с формой контура и offset и результат не предсказуем, только расчёт)</param>
+/// <returns></returns>
+template <typename StraightSkeleton_2,
+          typename FT,
+          typename HDS_Halfedge_const_handle,
+          typename Point_2,
+          typename Polygon_2,
+          typename NamedParameters = parameters::Default_named_parameters
+          
+>
+bool offset_params(StraightSkeleton_2 ss_ptr, // Уже рассчитанный Straight Skeleton на котором будет рассчитываться offset и extrude
+  const FT offset,  // Значение offset
+  const NamedParameters& np, // Именные параметры для обработки данных
+  std::unordered_map<HDS_Halfedge_const_handle, Point_2>& offset_points, // Результат в виде отображения ребра SS на точку пересечения Point_2 с offset
+  std::back_insert_iterator<std::vector<std::shared_ptr<Polygon_2>>> raw_output
+) {
+  
+  namespace SSEI = Straight_skeleton_extrusion::internal;
+  namespace PMP = ::CGAL::Polygon_mesh_processing;
+  using Point = typename boost::range_value<Polygon_2>::type;
+  using Default_kernel = typename Kernel_traits<Point>::type;
+  using Geom_traits = typename internal_np::Lookup_named_param_def<internal_np::geom_traits_t,
+                                                                    NamedParameters,
+                                                                    Default_kernel>::type;
+
+  using parameters::choose_parameter;
+  using parameters::get_parameter;
+  Geom_traits gt = choose_parameter<Geom_traits>(get_parameter(np, CGAL::internal_np::geom_traits));
+  SSEI::Extrusion_builder<Geom_traits> builder(gt);
+
+  bool res = builder.offset_params(ss_ptr, offset, offset_points, raw_output, np);
+  return res;
+}
+
 
 } // namespace CGAL
 
