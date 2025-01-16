@@ -24,9 +24,11 @@ class MESH_DATA2(ctypes.Structure):
         ("nn_verts", ctypes.POINTER( (ctypes.c_int)), ),
         ("nn_edges", ctypes.POINTER( (ctypes.c_int)), ),
         ("nn_faces", ctypes.POINTER( (ctypes.c_int)), ),
-        ("vertices", ctypes.POINTER( (ctypes.c_float)*3), ),
-        ("edges"   , ctypes.POINTER( (ctypes.c_int)*2), ),
-        ("faces"   , ctypes.POINTER( (ctypes.c_int)*3), ),
+        ("nn_faces_indexes_counters", ctypes.POINTER( (ctypes.c_int)), ), # Счётчик индексов вершин для faces (количество счётчиков равно количеству nn_faces). Этот параметр появился, потому что количество вершин в faces стало переменным.
+        ("vertices", ctypes.POINTER( (ctypes.c_float)*3), ), # Координаты вершин - тройной float
+        ("edges"   , ctypes.POINTER( (ctypes.c_int)*2), ), # Индексы рёбер (всегда по 2)
+        #("faces"   , ctypes.POINTER( (ctypes.c_int)*3), ),
+        ("faces"   , ctypes.POINTER( (ctypes.c_int) ), ), # Индексы вершин в гранях
 
         ("nn_source_objects_count"   , ctypes.c_int                          ), # Количество исходных объектов для чтения и выдачи информации по ошибкам по исходных объектам. Количество результирующих mesh может отличаться от исходных объектов по параметру results_join_mode
         ("nn_source_objects_indexes" , ctypes.POINTER( (ctypes.c_int   )  ), ), # индексы исходных объектов
@@ -177,6 +179,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             verts_I0   = 0
             edges_I0   = 0
             faces_I0   = 0
+            faces_indexes_I0 = 0
             offsets_I0 = 0
 
             error_I0                        = 0
@@ -199,9 +202,22 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 edges_I0 += edges_count
 
                 #### Extract New Faces #### 
+                # extract face indexes counters:
                 faces_count = mdc.nn_faces[I]
-                new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                faces_indexes_counters = [ mdc.nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
+                faces_indexes_pos = 0
+                new_faces1 = []
+                for counter in faces_indexes_counters:
+                    face1 = []
+                    face1_append = face1.append
+                    for i in range(counter):
+                        face1_append(mdc.faces[faces_indexes_I0+faces_indexes_pos])
+                        faces_indexes_pos+=1
+                        pass
+                    new_faces1.append(tuple(face1))
+                #new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
                 faces_I0 += faces_count
+                faces_indexes_I0 += faces_indexes_pos
 
                 #### Extract indexe of object
                 offsets_counts = mdc.nn_offsets_counts[I]
@@ -302,6 +318,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         ctypes.POINTER((ctypes.c_double) ), # in_angles - Должны точно соответствовать параметрам контуров in_count_of_planes и in_contours_in_planes
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_planes (chained)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_contours_in_planes (chained)
+
         ctypes.POINTER((ctypes.c_int  ) ),  # in_vertices_in_contours - count of vertices in contours (chained)
         ctypes.POINTER((ctypes.c_float)*3), # in_vertices - (array)
         ctypes.c_bool,                      # only_tests_for_valid
@@ -410,7 +427,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         if(mdc.str_error is not None):
             str_error = mdc.str_error.decode("ascii")
 
-        # Собрать результаты
+        # Собрать результаты, чтобы хоть что-то показать пользователю.
         new_vertices = []
         new_edges    = []
         new_faces    = []
@@ -419,6 +436,8 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
             verts_I0   = 0
             edges_I0   = 0
             faces_I0    = 0
+            faces_indexes_I0 = 0
+            offsets_I0 = 0
 
             for I in range(mdc.nn_objects):
                 object_index = mdc.nn_objects_indexes[I]
@@ -434,9 +453,27 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
                 edges_I0 += edges_count
 
                 #### Extract New Faces #### 
+                # faces_count = mdc.nn_faces[I]
+                # new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                # faces_I0 += faces_count
+
+                #### Extract New Faces #### 
+                # extract face indexes counters:
                 faces_count = mdc.nn_faces[I]
-                new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                faces_indexes_counters = [ mdc.nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
+                faces_indexes_pos = 0
+                new_faces1 = []
+                for counter in faces_indexes_counters:
+                    face1 = []
+                    face1_append = face1.append
+                    for i in range(counter):
+                        face1_append(mdc.faces[faces_indexes_I0+faces_indexes_pos])
+                        faces_indexes_pos+=1
+                        pass
+                    new_faces1.append(tuple(face1))
                 faces_I0 += faces_count
+                faces_indexes_I0 += faces_indexes_pos
+
 
                 new_mesh['objects'].append({
                     'object_index'              : object_index,
