@@ -626,6 +626,7 @@ public:
           HDS_Halfedge_const_handle hds_off_h = hds_h;
           auto off_p_0 = offset_points.find(hds_off_h);
           // Не понимаю, что делает это условие:
+          // Update: (предположение) может быть учитывает, что угол больше 90 градусов?
           if(hds_h->slope() == CGAL::NEGATIVE) // ensure same geometric point on both sides
             hds_off_h = hds_off_h->opposite();
 
