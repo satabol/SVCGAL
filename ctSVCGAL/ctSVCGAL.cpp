@@ -2946,7 +2946,11 @@ namespace CGAL {
                           /// <summary>
                           /// Информация об одном offset, относящемся к имеющемуся ss.
                           /// </summary>
-                          OIOA oioa;
+                          //OIOA oioa;
+
+                          FT oioa_offset;
+                          int oioa_offset_index;
+                          FT oioa_altitude;
 
                           /// <summary>
                           /// Какие точки пересечения с offset у текущего SS соответствуют halfedge текущего offset
@@ -2958,9 +2962,11 @@ namespace CGAL {
                           /// </summary>
                           std::unordered_map<HDS_Halfedge_const_handle, Point_2> map__halfedge__offset_points;
 
-                          SS_Offset_HalfEdge_Intersections_Point_2(OIOA _oioa, std::shared_ptr<Ss> _ss, std::unordered_map<HDS_Halfedge_const_handle, Point_2> _map__halfedge__offset_points)
-                            : oioa(_oioa), ss(_ss), map__halfedge__offset_points(_map__halfedge__offset_points){
-
+                          //SS_Offset_HalfEdge_Intersections_Point_2(OIOA _oioa, std::shared_ptr<Ss> _ss, std::unordered_map<HDS_Halfedge_const_handle, Point_2> _map__halfedge__offset_points)
+                          //  : oioa(_oioa), ss(_ss), map__halfedge__offset_points(_map__halfedge__offset_points){
+                          //}
+                          SS_Offset_HalfEdge_Intersections_Point_2(FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, std::shared_ptr<Ss> _ss, std::unordered_map<HDS_Halfedge_const_handle, Point_2> _map__halfedge__offset_points)
+                            : oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude), ss(_ss), map__halfedge__offset_points(_map__halfedge__offset_points){
                           }
                         };
 
@@ -2976,7 +2982,7 @@ namespace CGAL {
                                 if (map__ss_id__he_intersections_point2.find(he1.ss_id) == map__ss_id__he_intersections_point2.end()) {
                                   map__ss_id__he_intersections_point2[he1.ss_id] = std::vector<SS_Offset_HalfEdge_Intersections_Point_2>();
                                 }
-                                map__ss_id__he_intersections_point2[he1.ss_id].push_back(SS_Offset_HalfEdge_Intersections_Point_2(offset_params.oioa1, he1.ss, he1.map__halfedge__offset_points));
+                                map__ss_id__he_intersections_point2[he1.ss_id].push_back(SS_Offset_HalfEdge_Intersections_Point_2(offset_params.oioa1.offset, offset_params.oioa1.offset_index, offset_params.oioa1.altitude, he1.ss, he1.map__halfedge__offset_points));
                                 map__ss_id__ss[he1.ss_id] = he1.ss;
                               }
                             }
@@ -2985,7 +2991,7 @@ namespace CGAL {
                           // чтобы позже при обходе контура выстроить точки пересечения в каждом halfedge по порядку offset_index (с учётом наклона/slope halfedge):
                           for (auto& [ss_id, vect_intersection_points] : map__ss_id__he_intersections_point2) {
                             std::sort(vect_intersection_points.begin(), vect_intersection_points.end(), [](const SS_Offset_HalfEdge_Intersections_Point_2& elem1, const SS_Offset_HalfEdge_Intersections_Point_2& elem2) {
-                              bool res = elem1.oioa.offset_index < elem2.oioa.offset_index;
+                              bool res = elem1.oioa_offset_index < elem2.oioa_offset_index;
                               return res;
                             });
                           }
@@ -3010,7 +3016,7 @@ namespace CGAL {
                               for (auto& [ss_id, vect_ss_offset_intersection_points /*относится только к одному ss_id*/] : map__ss_id__he_intersections_point2) {
                                 printf("\nss_id=%u", ss_id);
                                 for (auto& offset_intersections_point : vect_ss_offset_intersection_points) {
-                                  printf("\n  offset=% 2.8lf: [", CGAL::to_double(offset_intersections_point.oioa.offset));
+                                  printf("\n  offset=% 2.8lf: [", CGAL::to_double(offset_intersections_point.oioa_offset));
                                   for (auto& [he_handle, point] : offset_intersections_point.map__halfedge__offset_points) {
                                     printf("% 2u:(% 2.8lf, % 2.8lf) ", he_handle->slope(), CGAL::to_double(point.x()), CGAL::to_double(point.y()));
                                   }
@@ -3068,15 +3074,18 @@ namespace CGAL {
                               DOWN
                             };
 
-                            OIOA oioa;
+                            //OIOA oioa;
+                            FT oioa_offset;
+                            int oioa_offset_index;
+                            FT oioa_altitude;
 
                             /// <summary>
                             /// Чтобы найти параметры offset.
                             /// </summary>
                             //int offset_index;
 
-                            SHAPE_POINT(int _index, Point_3& _point, bool _is_altitude_calc, OIOA& _oioa)
-                              : index(_index), point(_point), is_altitude_calc(_is_altitude_calc), oioa(_oioa) {
+                            SHAPE_POINT(int _index, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude)
+                              : index(_index), point(_point), is_altitude_calc(_is_altitude_calc), oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude) {
 
                             }
 
@@ -3090,7 +3099,7 @@ namespace CGAL {
                             //}
 
                             SHAPE_POINT()
-                              :index(-1), point(0.0,0.0,0.0), is_altitude_calc(false), oioa(OIOA(-1, -1, 0.0, 0.0))
+                              :index(-1), point(0.0, 0.0, 0.0), is_altitude_calc(false), oioa_offset(0.0), oioa_offset_index(-1), oioa_altitude(0.0)
                             {
 
                             }
@@ -3102,20 +3111,37 @@ namespace CGAL {
                           /// Вектор результирующих точек SS-Beveled-проекции
                           /// </summary>
                           struct SHAPE_POINTS {
+                            /// <summary>
+                            /// Список точек с индексами.
+                            /// </summary>
                             std::map<int /*point_index*/, SHAPE_POINT> map__point_index__calc_point;
+                            
+                            /// <summary>
+                            /// Внутренний счётчик точек при создании новый точек
+                            /// </summary>
                             int ss_points_counter=0;
-                            // Сопоставление he
+
+                            /// <summary>
+                            /// Сопоставление индексов результирующих точек пересечениям с полурёбрами he во время обхода segment-ов.
+                            /// Параметр map__ss_id__he_handle и map__ss_id__vertex_id работают в паре при определении результирующих точек.
+                            /// </summary>
                             std::map<std::tuple<int /*ss_id*/, HDS_Halfedge_const_handle, int /*offset_index*/>, int /*уникальный идентификатор точки*/> map__ss_id__he_handle;
+
+                            /// <summary>
+                            /// Сопоставление индексов результирующих точек с точками самого SS во время обхода segment-ов.
+                            /// Параметр map__ss_id__he_handle и map__ss_id__vertex_id работают в паре при определении результирующих точек.
+                            /// </summary>
+
                             std::map<std::tuple<int /*ss_id*/, int        /*vertex_id*/                       >, int /*уникальный идентификатор точки*/> map__ss_id__vertex_id;
 
-                            int get_index_or_append_he__offset_index(int ss_id, HDS_Halfedge_const_handle& he_handle, int offset_index, Point_3& _point, bool _is_altitude_calc, OIOA& _oioa) {
+                            int get_index_or_append_he__offset_index(int ss_id, HDS_Halfedge_const_handle& he_handle, int offset_index, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude) {
                               auto& ss_id__he_handle__offset_index = std::tuple(ss_id, he_handle, offset_index);
                               auto& it = map__ss_id__he_handle.find(ss_id__he_handle__offset_index);
                               int res_counter = -1;
                               if (it == map__ss_id__he_handle.end()) {
                                 res_counter = ss_points_counter++;
                                 map__ss_id__he_handle[ss_id__he_handle__offset_index] = res_counter;
-                                map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa);
+                                map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude);
                               } else {
                                 auto& [tpl, _res_counter] = (*it);
                                 res_counter = _res_counter;
@@ -3123,14 +3149,14 @@ namespace CGAL {
                               return res_counter;
                               };
 
-                            int get_index_or_append_vertex_id (int ss_id, int vertex_id, Point_3& _point, bool _is_altitude_calc, OIOA& _oioa) {
+                            int get_index_or_append_vertex_id (int ss_id, int vertex_id, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude) {
                               auto& ss_id__vertex_id = std::tuple(ss_id, vertex_id);
                               auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                               int res_counter = -1;
                               if (it == map__ss_id__vertex_id.end()) {
                                 res_counter = ss_points_counter++;
                                 map__ss_id__vertex_id[ss_id__vertex_id] = res_counter;
-                                map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa);
+                                map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude);
                               } else {
                                 auto& [tpl, _res_counter] = (*it);
                                 res_counter = _res_counter;
@@ -3139,6 +3165,7 @@ namespace CGAL {
                             };
                           };
 
+                          // Список точек, образующихся в результате рассчётов сегментов.
                           SHAPE_POINTS calc_points;
 
                           {
@@ -3247,7 +3274,11 @@ namespace CGAL {
                                             /// <summary>
                                             /// Параметры offset, с которым у рассматриваемой halfedge возникло пересечение
                                             /// </summary>
-                                            OIOA oioa;
+                                            //OIOA oioa;
+                                            FT  oioa_offset;
+                                            int oioa_offset_index;
+                                            FT  oioa_altitude;
+
 
                                             /// <summary>
                                             /// Точка пересечения с halfedge
@@ -3256,8 +3287,11 @@ namespace CGAL {
 
                                             //int intersection_index;
 
-                                            POINT_INFO(OIOA& _oioa, Point_2& _point )
-                                              :oioa(_oioa), point(_point) {
+                                            //POINT_INFO(OIOA& _oioa, Point_2& _point )
+                                            //  :oioa(_oioa), point(_point) {
+                                            //}
+                                            POINT_INFO(FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, Point_2& _point )
+                                              :oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude), point(_point) {
                                             }
                                           };
                                           // Список offset с которыми произошли пересечения
@@ -3279,7 +3313,7 @@ namespace CGAL {
                                               auto& offset0_he_intersect_iter = intersection_points.map__halfedge__offset_points.find(hds_offset_h);
                                               if (offset0_he_intersect_iter != intersection_points.map__halfedge__offset_points.end()) {
                                                 auto& [HDS_Halfedge_const_handle, point] = *offset0_he_intersect_iter;
-                                                vect__intersection_point_info.push_back(POINT_INFO(intersection_points.oioa, point));
+                                                vect__intersection_point_info.push_back(POINT_INFO(intersection_points.oioa_offset, intersection_points.oioa_offset_index, intersection_points.oioa_altitude, point));
                                               }
                                             }
                                           } else {
@@ -3290,7 +3324,7 @@ namespace CGAL {
                                               auto& offset0_he_intersect_iter = intersection_points.map__halfedge__offset_points.find(hds_offset_h);
                                               if (offset0_he_intersect_iter != intersection_points.map__halfedge__offset_points.end()) {
                                                 auto& [HDS_Halfedge_const_handle, point] = *offset0_he_intersect_iter;
-                                                vect__intersection_point_info.push_back(POINT_INFO(intersection_points.oioa, point));
+                                                vect__intersection_point_info.push_back(POINT_INFO(intersection_points.oioa_offset, intersection_points.oioa_offset_index, intersection_points.oioa_altitude, point));
                                               }
                                             }
                                           }
@@ -3326,7 +3360,7 @@ namespace CGAL {
                                                 }
                                                 // TODO - так-то их можно сразу обрабатывать на месте обнаружения. Подумать, как сделать это прямо в точке обнаружения выше.
                                                 for (auto& he_offset : vect__intersection_point_info) {
-                                                  int point_index = calc_points.get_index_or_append_he__offset_index(ss_id, hds_offset_h, he_offset.oioa.offset_index, Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa.altitude), true, he_offset.oioa);
+                                                  int point_index = calc_points.get_index_or_append_he__offset_index(ss_id, hds_offset_h, he_offset.oioa_offset_index, Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa_altitude), true, he_offset.oioa_offset, he_offset.oioa_offset_index, he_offset.oioa_altitude );
                                                   vect_contour_shape_point.push_back(CONTOUR_SHAPE_POINT(point_index, pt));
                                                 }
                                               }
@@ -3343,7 +3377,7 @@ namespace CGAL {
                                             } else {
                                               // Добавить точку контура в список (если она не первая в списке при двух смежных faces. Если faces>1, то тут первая точка уже пропущена уже пропущена)
                                               int he_vertex_id = hds_h->vertex()->id();
-                                              int point_index = calc_points.get_index_or_append_vertex_id(segment_faces_I.ss_id, he_vertex_id, Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/), false /*altitude не рассчитана, будет считаться позже*/, OIOA(object_index, -1 /*Это точка контура, поэтому offset-а у неё нет*/, 0.0, 0) );
+                                              int point_index = calc_points.get_index_or_append_vertex_id(segment_faces_I.ss_id, he_vertex_id, Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/), false /*altitude не рассчитана, будет считаться позже*/, 0.0, -1 /*Это точка контура, поэтому offset-а у неё нет*/, 0.0 );
                                               vect_contour_shape_point.push_back(CONTOUR_SHAPE_POINT(point_index, SHAPE_POINT::POINT_TYPE::POINT));
                                             }
                                           }
@@ -3429,20 +3463,29 @@ namespace CGAL {
                                 /// <summary>
                                 /// Первый отступ
                                 /// </summary>
-                                OIOA oioa0;
+                                //OIOA oioa0;
+                                int oioa0_offset_index;
+                                FT oioa0_offset;
 
                                 /// <summary>
                                 /// Второй отступ
                                 /// </summary>
-                                OIOA oioa1;
+                                //OIOA oioa1;
+                                int oioa1_offset_index;
+                                FT oioa1_offset;
 
                                 /// <summary>
                                 /// Выполнять ли reverse. (По хорошему этот параметр должен быть где-то снаружи, т.к. это однократная операция)
                                 /// </summary>
                                 bool do_reverse;
 
-                                FACE_INFO(OIOA& _oioa0, OIOA& _oioa1, bool& _do_reverse)
-                                : oioa0(_oioa0), oioa1(_oioa1), do_reverse(_do_reverse){
+                                //FACE_INFO(OIOA& _oioa0, OIOA& _oioa1, bool& _do_reverse)
+                                //: oioa0(_oioa0), oioa1(_oioa1), do_reverse(_do_reverse){
+                                //  
+                                //}
+
+                                FACE_INFO(int _oioa0_offset_index, FT _oioa0_offset, int _oioa1_offset_index, FT _oioa1_offset, bool& _do_reverse)
+                                  : oioa0_offset_index(_oioa0_offset_index), oioa0_offset(_oioa0_offset), oioa1_offset_index(_oioa1_offset_index), oioa1_offset(_oioa1_offset), do_reverse(_do_reverse) {
                                   
                                 }
                               };
@@ -3478,26 +3521,38 @@ namespace CGAL {
                                   // направления нормалей faces
 
                                   struct EDGE_INFO {
-                                    OIOA oioa0;
-                                    OIOA oioa1;
-                                    EDGE_INFO(OIOA& _oioa0, OIOA& _oioa1)
-                                      : oioa0(_oioa0), oioa1(_oioa1) {
+                                    //OIOA oioa0;
+                                    int oioa0_offset_index;
+                                    FT  oioa0_offset;
+
+                                    //OIOA oioa1;
+                                    int oioa1_offset_index;
+                                    FT  oioa1_offset;
+
+                                    //EDGE_INFO(OIOA& _oioa0, OIOA& _oioa1)
+                                    //  : oioa0(_oioa0), oioa1(_oioa1) {
+
+                                    //}
+                                    EDGE_INFO(int _oioa0_offset_index, FT _oioa0_offset, int _oioa1_offset_index, FT _oioa1_offset)
+                                      : oioa0_offset_index(_oioa0_offset_index), oioa0_offset(_oioa0_offset), oioa1_offset_index(_oioa1_offset_index), oioa1_offset(_oioa1_offset) {
 
                                     }
                                   };
                                   std::vector<EDGE_INFO> vect_edges;
                                   for (int I = 0; I <= (int)vect_oioa.size() - 2; I++) {
-                                    vect_edges.push_back(EDGE_INFO(vect_oioa[I+0], vect_oioa[I+1]));
+                                    vect_edges.push_back(EDGE_INFO(vect_oioa[I+0].offset_index,vect_oioa[I+0].offset, vect_oioa[I+1].offset_index, vect_oioa[I+1].offset_index));
                                   }
 
                                   std::vector<FACE_INFO>& vect_faces /*список faces на текущем сегменте*/ = std::vector/*faces*/<FACE_INFO>();
                                   for (auto& edge_info : vect_edges) {
-                                    auto& _oioa0 = edge_info.oioa0;
-                                    auto& _oioa1 = edge_info.oioa1;
+                                    auto& _oioa0_offset_index = edge_info.oioa0_offset_index;
+                                    auto& _oioa0_offset = edge_info.oioa0_offset;
+                                    auto& _oioa1_offset_index = edge_info.oioa1_offset_index;
+                                    auto& _oioa1_offset = edge_info.oioa1_offset;
                                     
                                     // Сначала определить какой сегмент по абсолютному значению ближе к линии 0-0?
-                                    auto& offset0     = vect_oioa[_oioa0.offset_index].offset;
-                                    auto& offset1     = vect_oioa[_oioa1.offset_index].offset;
+                                    auto& offset0     = vect_oioa[_oioa0_offset_index].offset;
+                                    auto& offset1     = vect_oioa[_oioa1_offset_index].offset;
 
                                     // Подсчёт faces всегда выполняется против часовой стрелки от первой точки после старта.
                                     COLLECT_CURSOR& cursor = COLLECT_CURSOR(false, false, false,-1, SHAPE_POINT::POINT_TYPE::POINT, -1, SHAPE_POINT::POINT_TYPE::POINT);
@@ -3508,47 +3563,47 @@ namespace CGAL {
                                       if (offset0 > offset1) {
                                         // 0
                                         // 1
-                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP);
                                       }else if (offset1 > offset0) {
                                         // 1
                                         // 0
-                                        cursor = COLLECT_CURSOR( false, true,  false, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                        cursor = COLLECT_CURSOR( false, true,  false, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP);
                                       } else
                                         /* остальные, когда offset0 == offset1 */
-                                      if (_oioa0.offset_index < _oioa1.offset_index) {
+                                      if (_oioa0_offset_index < _oioa1_offset_index) {
                                         // 1
                                         // 0
-                                        cursor = COLLECT_CURSOR( false, true, false, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::UP);
-                                      } else if (_oioa0.offset_index > _oioa1.offset_index) {
+                                        cursor = COLLECT_CURSOR( false, true, false, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                      } else if (_oioa0_offset_index > _oioa1_offset_index) {
                                         // 0
                                         // 1
-                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP);
                                       } 
                                     } else if (offset0 > 0 && offset1 > 0) {
                                       // оба offset выше 0-0
                                       if (offset0 > offset1) {
                                         // 0
                                         // 1
-                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
+                                        cursor = COLLECT_CURSOR( false, true,  true, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
                                       }else if (offset1 > offset0) {
                                         // 1
                                         // 0
-                                        cursor = COLLECT_CURSOR( false, true, false, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
+                                        cursor = COLLECT_CURSOR( false, true, false, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
                                       } else
                                         /* остальные, когда offset0 == offset1 */
-                                        if (_oioa0.offset_index > _oioa1.offset_index) {
-                                          cursor = COLLECT_CURSOR(  false, true,  true, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
-                                        } else if (_oioa1.offset_index > _oioa0.offset_index) {
-                                          cursor = COLLECT_CURSOR(  false, true, false, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
+                                        if (_oioa0_offset_index > _oioa1_offset_index) {
+                                          cursor = COLLECT_CURSOR(  false, true,  true, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
+                                        } else if (_oioa1_offset_index > _oioa0_offset_index) {
+                                          cursor = COLLECT_CURSOR(  false, true, false, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN);
                                         } 
                                     } else if (offset0 < 0 && offset1 > 0) {
                                       // Добавить новый face и разрешить добавлять в него точки типа POINT сразу
-                                      cursor = COLLECT_CURSOR(true, false,false, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::UP);
-                                      vect_faces.push_back(FACE_INFO(_oioa0, _oioa1, cursor.do_reverse));
+                                      cursor = COLLECT_CURSOR(true, false,false, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                      vect_faces.push_back(FACE_INFO(_oioa0_offset_index, _oioa0_offset, _oioa1_offset_index, _oioa1_offset, cursor.do_reverse));
                                     } else if (offset0 > 0 && offset1 < 0) {
                                       // Добавить новый face и разрешить добавлять в него точки типа POINT сразу
-                                      cursor = COLLECT_CURSOR(true, false,  true, _oioa0.offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1.offset_index, SHAPE_POINT::POINT_TYPE::UP);
-                                      vect_faces.push_back(FACE_INFO(_oioa0, _oioa1, cursor.do_reverse));
+                                      cursor = COLLECT_CURSOR(true, false,  true, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP);
+                                      vect_faces.push_back(FACE_INFO(_oioa0_offset_index, _oioa0_offset, _oioa1_offset_index, _oioa1_offset, cursor.do_reverse));
                                     } else {
                                       // Осталось, когда одна из точек в нуле
                                     }
@@ -3563,28 +3618,28 @@ namespace CGAL {
                                         continue;
                                       }
 
-                                      if (calc_point.oioa.offset_index== cursor.offset_index0 && contour_point.type == cursor.offset_type0) {
+                                      if (contour_point.type == cursor.offset_type0 && calc_point.oioa_offset_index== cursor.offset_index0) {
                                         if (cursor.do_create_new_faces == true) {
                                           // Создать новый face и запомнить эту точку:
-                                          vect_faces.push_back(FACE_INFO(_oioa0, _oioa1, cursor.do_reverse));
+                                          vect_faces.push_back(FACE_INFO(_oioa0_offset_index, _oioa0_offset, _oioa1_offset_index, _oioa1_offset, cursor.do_reverse));
                                         }
                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                         cursor.do_collect_points = true;
                                         continue;
                                       }
-                                      if (calc_point.oioa.offset_index == cursor.offset_index0 && contour_point.type != cursor.offset_type0) {
+                                      if (contour_point.type != cursor.offset_type0 && calc_point.oioa_offset_index == cursor.offset_index0) {
                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                         cursor.do_collect_points = false;
                                         continue;
                                       }
 
-                                      if (calc_point.oioa.offset_index == cursor.offset_index1 && contour_point.type == cursor.offset_type1) {
+                                      if (contour_point.type == cursor.offset_type1 && calc_point.oioa_offset_index == cursor.offset_index1) {
                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                         cursor.do_collect_points = true;
                                         continue;
                                       }
 
-                                      if (calc_point.oioa.offset_index == cursor.offset_index1 && contour_point.type != cursor.offset_type1) {
+                                      if (contour_point.type != cursor.offset_type1 && calc_point.oioa_offset_index == cursor.offset_index1) {
                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                         cursor.do_collect_points = false;
                                         continue;
@@ -3610,12 +3665,12 @@ namespace CGAL {
                                     for (auto& contour_point : vect_segment_points) {
                                       auto& calc_point = calc_points.map__point_index__calc_point[contour_point.point_index];
                                       // Временная сквозная нумерация точек пересечений и исходных точек в пределах одного segment. Позже надо будет разобраться как пронумеровать ВСЕ точки объекта
-                                      printf("\n  % 2.8lf, % 2.8lf, % 2.8lf, type: %s, alt: %s:% 2.8lf, offset_index: % 3d, % 2.8lf; % 4u / % 3u", CGAL::to_double(calc_point.point.x()), CGAL::to_double(calc_point.point.y()), CGAL::to_double(calc_point.point.z()), contour_point.type == 0 ? "POINT" : contour_point.type == 1 ? "   UP" : " DOWN", calc_point.is_altitude_calc == true ? "    set" : "not set", CGAL::to_double(calc_point.oioa.altitude), calc_point.oioa.offset_index, CGAL::to_double(calc_point.oioa.offset), contour_point.point_index, counter++);
+                                      printf("\n  % 2.8lf, % 2.8lf, % 2.8lf, type: %s, alt: %s:% 2.8lf, offset_index: % 3d, % 2.8lf; % 4u / % 3u", CGAL::to_double(calc_point.point.x()), CGAL::to_double(calc_point.point.y()), CGAL::to_double(calc_point.point.z()), contour_point.type == 0 ? "POINT" : contour_point.type == 1 ? "   UP" : " DOWN", calc_point.is_altitude_calc == true ? "    set" : "not set", CGAL::to_double(calc_point.oioa_altitude), calc_point.oioa_offset_index, CGAL::to_double(calc_point.oioa_offset), contour_point.point_index, counter++);
                                     }
                                     // Вывод только тех точек, которые образуют faces:
                                     int face_id = 0;
                                     for (auto& face_info : map__ss_id__mesh_face_id__faces__indexes[ss_id][mesh_face_id]) {
-                                      printf("\n      face_id % 3u offsets: (% 2d, % 2d : % 2.8lf, % 2.8lf, reversed: %s); len: (% 3d): ", face_id, face_info.oioa0.offset_index, face_info.oioa1.offset_index, CGAL::to_double(face_info.oioa0.offset), CGAL::to_double(face_info.oioa1.offset), face_info.do_reverse == true ? "yes" : " no", (int)face_info.face_verts_indexes.size());
+                                      printf("\n      face_id % 3u offsets: (% 2d, % 2d : % 2.8lf, % 2.8lf, reversed: %s); len: (% 3d): ", face_id, face_info.oioa0_offset_index, face_info.oioa1_offset_index, CGAL::to_double(face_info.oioa0_offset), CGAL::to_double(face_info.oioa1_offset), face_info.do_reverse == true ? "yes" : " no", (int)face_info.face_verts_indexes.size());
                                       for (auto& vert_index : face_info.face_verts_indexes) {
                                         printf(" % 3u", vert_index);
                                       }
@@ -3754,15 +3809,21 @@ namespace CGAL {
                                       /// <summary>
                                       /// Параметры offset, с которым у рассматриваемой halfedge возникло пересечение
                                       /// </summary>
-                                      OIOA oioa;
+                                      //OIOA oioa;
+                                      int oioa_offset_index;
+                                      FT  oioa_offset;
+                                      int oioa_altitude;
 
                                       /// <summary>
                                       /// Точка пересечения с halfedge
                                       /// </summary>
                                       Point_2 point;
 
-                                      POINT_INFO(OIOA& _oioa, Point_2& _point)
-                                        :oioa(_oioa), point(_point) {
+                                      //POINT_INFO(OIOA& _oioa, Point_2& _point)
+                                      //  :oioa(_oioa), point(_point) {
+                                      //}
+                                      POINT_INFO(FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, Point_2& _point)
+                                        :oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude), point(_point) {
                                       }
                                     };
                                     // Список offset с которыми произошли пересечения
@@ -3771,14 +3832,14 @@ namespace CGAL {
                                       auto& offset0_he_intersect_iter = intersection_points.map__halfedge__offset_points.find(hds_offset_h);
                                       if (offset0_he_intersect_iter != intersection_points.map__halfedge__offset_points.end()) {
                                         auto& [HDS_Halfedge_const_handle, point] = *offset0_he_intersect_iter;
-                                        vect_he_offset.push_back(POINT_INFO(intersection_points.oioa, point));
+                                        vect_he_offset.push_back(POINT_INFO(intersection_points.oioa_offset, intersection_points.oioa_offset_index, intersection_points.oioa_altitude, point));
                                       }
                                     }
                                     // Добавить точки в контур
                                     {
                                       std::sort(vect_he_offset.begin(), vect_he_offset.end(), [](const POINT_INFO& p1, const POINT_INFO& p2) {
                                         bool res = false;
-                                        if (p1.oioa.offset > p2.oioa.offset) {
+                                        if (p1.oioa_offset > p2.oioa_offset) {
                                           res = true;
                                         }
                                         //else if (p1.oioa.offset == p2.oioa.offset) {
@@ -3801,12 +3862,12 @@ namespace CGAL {
                                             pt = SHAPE_POINT::POINT_TYPE::DOWN;
                                           }
                                           for (auto& he_offset : vect_he_offset) {
-                                            segment_contour_points.push_back(SHAPE_POINT(0, Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa.altitude), true, he_offset.oioa));
+                                            segment_contour_points.push_back(SHAPE_POINT(0, Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa_altitude), true, he_offset.oioa_offset, he_offset.oioa_offset_index, he_offset.oioa_altitude ));
                                           }
                                         }
                                       }
                                       // Добавить точку контура в список
-                                      segment_contour_points.push_back(SHAPE_POINT(0, Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/), false /*altitude не рассчитана, будет считаться позже*/, OIOA(object_index, -1 /*Это точка контура, поэтому offset-а у неё нет*/, 0.0, 0.0) ));
+                                      segment_contour_points.push_back(SHAPE_POINT(0, Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/), false /*altitude не рассчитана, будет считаться позже*/, 0, /*Это точка контура, поэтому offset-а у неё нет*/ -1, 0.0 ));
                                     }
                                     vect_segment_faces_edges_handle.back().push_back(hds_offset_h);
                                     face_slopes.push_back(hds_h->slope()); // Предположительно это указывает направление движения к или от центра SS.
@@ -3847,8 +3908,8 @@ namespace CGAL {
                                 printf("\n" VAL2STR(Err::_0038) " object_index %u, Offsets: [", object_index);
                                 for (int I = 0; I <= (int)vect_ss_offset_intersection_points.size() - 2; I++) {
                                   auto& vect_ss_offset_intersection_points_I0 = vect_ss_offset_intersection_points[I + 0];
-                                  auto& offset = vect_ss_offset_intersection_points_I0.oioa.offset;
-                                  auto& offset_index = vect_ss_offset_intersection_points_I0.oioa.offset_index;
+                                  auto& offset = vect_ss_offset_intersection_points_I0.oioa_offset;
+                                  auto& offset_index = vect_ss_offset_intersection_points_I0.oioa_offset_index;
                                   printf("%u: %.5g; ", offset_index, CGAL::to_double(offset));
                                 }
                                 printf("];");
@@ -3892,7 +3953,7 @@ namespace CGAL {
                                 // После получения полигонов между этими offset нужно вернуть их ориентацию в исходное состояние (перевернуть нормали, может быть
                                 // просто инвертировать индексы вершин?)
                                 bool reverse_result_offset = false; // если 
-                                if (offset0_info->oioa.offset > offset1_info->oioa.offset) {
+                                if (offset0_info->oioa_offset > offset1_info->oioa_offset) {
                                   std::swap(offset0_info, offset1_info);
                                   reverse_result_offset = true;
                                 }
@@ -3912,7 +3973,7 @@ namespace CGAL {
                                   };
 
                                   // если ss - положительный, то рассчёт идёт по контуру от offset0 к offset1 (достаточно проверить первый offset)
-                                  if (offset0_info->oioa.offset >= 0) {
+                                  if (offset0_info->oioa_offset >= 0) {
                                   } else {
                                     // если ss - отрицательный, то рассчёт идёт по контуру от offset1 к offset0
                                     std::swap(offset0_info, offset1_info);
@@ -3952,11 +4013,11 @@ namespace CGAL {
                                             // В случае, если полигон открылся только одним offset0 (пересечения в offset1 нет),
                                             // то добавить и точку пересечения offset0-halfedge и точку halfedge: <image url="..\code_images\file_0057.png" scale=".3"/>
                                             //vect_offset01_polygon_points - должен быть сейчас пустым, потому что тут начинается новый полигон
-                                            vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa.altitude), true));
+                                            vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa_altitude), true));
                                             vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(he_point.x(), he_point.y(), 0.0), false /*высота z точки ещё не определена*/));
                                             affect_mode = APPEND;
                                           } else if (affect_mode == APPEND) {
-                                            vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa.altitude), true));
+                                            vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa_altitude), true));
                                             // Расчётный полигон копируется в список полигонов и очищается для дальнейшего наполнения:
                                             vect_segment_offsets_faces.push_back(std::vector<OFFSET_POINT>(vect_offset01_polygon_points.begin(), vect_offset01_polygon_points.end())); // Скопировать полученный полигон в список полигонов
                                             vect_offset01_polygon_points.clear(); // Начать новый вектор точек полигона
@@ -3969,13 +4030,13 @@ namespace CGAL {
                                               // Если при пересечении offset1 произошёл вход в полигон, без выхода в offset0, то нужно запомнить
                                               // и точку пересечения offset1 и точку halfedge. При этом разрешить добавление следующих точек he, если они встретятся до точку пересечения offset1
                                               // <image url="..\code_images\file_0055.png" scale=".4"/>
-                                              vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa.altitude), true));
+                                              vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa_altitude), true));
                                               vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(he_point.x(), he_point.y(), 0.0), false /*высота z точки ещё не определена*/));
                                               affect_mode = APPEND;
                                             } else if (affect_mode == APPEND) {
                                               // Если при переходе через offset1 произошёл выход из полигона, то запомнить точку пересечения offset1 и halfedge:
                                               // то нужно запомнить только точку пересечения halfedge <image url="..\code_images\file_0056.png" scale=".4"/>
-                                              vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa.altitude), true));
+                                              vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa_altitude), true));
                                               affect_mode = SKIP;
                                             }
                                           } else 
@@ -3986,14 +4047,14 @@ namespace CGAL {
                                                 if (vect_offset01_polygon_points.size() == 0) {
                                                   // Если полигон между offset-ами ещё пустой, то добавить в него в начало сразу обе точки в последовательности offset0,offset1 и оставить режим affect_mode=SKIP,
                                                   // потому что промежуточные точки halfedge не нужно добавлять при перечислении точек halfedge выше offset1
-                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa.altitude), true));
-                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa.altitude), true));
+                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa_altitude), true));
+                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa_altitude), true));
                                                 } else {
                                                   // Если halfedge пересекается с двумя точками offset1 и offset0, значит это пересечение закрывает этот полигон. Добавить точки пересечения offset1 и offset0,
                                                   // скопировать точки полигона в список полигонов и очистить буфер точек
                                                   // affect_mode=SKIP, чтобы если начнётся новый полигон, то начать новый вектор для его точек
-                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa.altitude), true));
-                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa.altitude), true));
+                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset1_he_intersect_point.x(), offset1_he_intersect_point.y(), offset1_info->oioa_altitude), true));
+                                                  vect_offset01_polygon_points.push_back(OFFSET_POINT(Point_3(offset0_he_intersect_point.x(), offset0_he_intersect_point.y(), offset0_info->oioa_altitude), true));
                                                   vect_segment_offsets_faces.push_back(std::vector<OFFSET_POINT>(vect_offset01_polygon_points.begin(), vect_offset01_polygon_points.end())); // Скопировать полученный полигон в список полигонов
                                                   vect_offset01_polygon_points.clear(); // Начать новый вектор точек полигона
                                                 }
