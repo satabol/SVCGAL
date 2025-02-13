@@ -3,6 +3,7 @@ import numpy as np
 import sys
 import traceback
 import itertools
+from time import time
 
 #print("== pySVCGAL.py start =================================================")
 
@@ -45,6 +46,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     """
     Documentation
     """   
+    time01 = time()
 
     # https://docs.python.org/3/library/ctypes.html
     straight_skeleton_2d_offset = SVCGAL_clib.straight_skeleton_2d_offset
@@ -94,7 +96,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     contours_in_planes_counter      = [] # Сколько в каждом плане контуров
     vertices_in_contour_counters    = []
     vertices_list                   = []
-    shapes_mode                     = [] # КОличество соответствует количеству объектов
+    shapes_mode                     = [] # Количество соответствует количеству объектов
 
     for I, object1 in enumerate(data['objects']):
         offsets_counters.append(len(object1['offsets']))
@@ -171,6 +173,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         'faces'     : [],
     }
 
+    time01 = time()-time01
+    if verbose==True:
+        print(f'\nOffset Straight Skeleton. Prepare data from external call: {time01} ms')
+
     try:
         md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
@@ -207,6 +213,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         new_edges    = []
         new_faces    = []
         
+        time01 = time()
         if mdc.nn_objects>0:
             verts_I0   = 0
             edges_I0   = 0
@@ -219,39 +226,46 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             nn_vertices_per_contour1_cursor = 0
             vertices_of_errors_cursor       = 0
             offsets_indexes_cursor          = 0
+
+            mdc_vertices = mdc.vertices
+            mdc_edges = mdc.edges
+            mdc_faces = mdc.faces
+            mdc_nn_faces = mdc.nn_faces
+            mdc_nn_faces_indexes_counters = mdc.nn_faces_indexes_counters
+
             for I in range(mdc.nn_objects):
                 object_index = mdc.nn_objects_indexes[I]
 
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
                 vertices_count = mdc.nn_verts[I]
-                new_vertices1 = [ tuple(mdc.vertices[verts_I0+i]) for i in range(vertices_count)]
+                new_vertices1 = [ tuple(mdc_vertices[verts_I0+i]) for i in range(vertices_count)]
                 verts_I0 += vertices_count
 
                 #### Extract New Edges ####
                 edges_count = mdc.nn_edges[I]
-                new_edges1 = [ tuple(mdc.edges[edges_I0+i]) for i in range(edges_count)]
+                new_edges1 = [ tuple(mdc_edges[edges_I0+i]) for i in range(edges_count)]
                 edges_I0 += edges_count
 
                 #### Extract New Faces #### 
                 # extract face indexes counters:
-                faces_count = mdc.nn_faces[I]
-                faces_indexes_counters = [ mdc.nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
+                faces_count = mdc_nn_faces[I]
+                faces_indexes_counters = [ mdc_nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
                 faces_indexes_pos = 0
                 new_faces1 = []
+                new_faces1_append = new_faces1.append
                 for counter in faces_indexes_counters:
                     face1 = []
                     face1_append = face1.append
                     for i in range(counter):
-                        face1_append(mdc.faces[faces_indexes_I0+faces_indexes_pos])
+                        face1_append(mdc_faces[faces_indexes_I0+faces_indexes_pos])
                         faces_indexes_pos+=1
                         pass
-                    new_faces1.append(tuple(face1))
-                #new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                    new_faces1_append(tuple(face1))
                 faces_I0 += faces_count
                 faces_indexes_I0 += faces_indexes_pos
 
-                #### Extract indexe of object
+                #### Extract indexes of object
                 offsets_counts = mdc.nn_offsets_counts[I]
                 offsets_indexes = [ mdc.nn_offsets_indexes[offsets_I0+i] for i in range(offsets_counts)]
                 offsets_I0 += offsets_counts
@@ -266,6 +280,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
                 pass
             pass
+
+        time01 = time()-time01
+        if verbose==True:
+            print(f'\nOffset Straight Skeleton. Load data from external call: {time01} ms')
 
         # Извлечь ошибки по исходным объектам
         if mdc.nn_source_objects_count>0:
