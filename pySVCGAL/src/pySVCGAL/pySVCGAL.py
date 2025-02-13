@@ -71,6 +71,8 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.c_int,                       # source_objects_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_int,                       # results_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
+        ctypes.c_bool,                      # use_cache_of_straight_skeleton
+        ctypes.c_bool,                      # bevel_more_split - if negative offset or several contours in source shape
     ]
     straight_skeleton_2d_offset.restype = ctypes.POINTER(MESH_DATA2)
 
@@ -79,12 +81,14 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.POINTER(MESH_DATA2)
     ]
 
-    force_z_zero                = data['force_z_zero']
-    res_type                    = data['res_type']
-    only_tests_for_valid        = data['only_tests_for_valid']
-    source_objects_join_mode    = data['source_objects_join_mode']
-    results_join_mode           = data['results_join_mode']
-    verbose                     = data['verbose']
+    force_z_zero                   = data['force_z_zero']
+    res_type                       = data['res_type']
+    only_tests_for_valid           = data['only_tests_for_valid']
+    source_objects_join_mode       = data['source_objects_join_mode']
+    results_join_mode              = data['results_join_mode']
+    verbose                        = data['verbose']
+    use_cache_of_straight_skeleton = data['use_cache_of_straight_skeleton']
+    bevel_more_split               = data['bevel_more_split']
 
     offsets_counters                = []
     offsets_array                   = []
@@ -199,7 +203,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             force_z_zero,
             source_objects_join_mode,
             results_join_mode,
-            verbose
+            verbose,
+            use_cache_of_straight_skeleton,
+            bevel_more_split,
         )
         ################ Get Results ################
         mdc = md.contents
