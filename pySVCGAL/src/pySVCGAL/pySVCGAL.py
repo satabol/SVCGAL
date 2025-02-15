@@ -69,6 +69,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.c_int,                       # result type: 0 - contours, 1 - Mesh
         ctypes.c_bool,                      # force_z_zero
         ctypes.c_int,                       # source_objects_join_mode 0 - split, 1 - keep, 2 - merge all meshes
+        ctypes.c_int,                       # profile_close_mode 0-open, 1-close
         ctypes.c_int,                       # results_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
         ctypes.c_bool,                      # use_cache_of_straight_skeleton
@@ -85,6 +86,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     res_type                       = data['res_type']
     only_tests_for_valid           = data['only_tests_for_valid']
     source_objects_join_mode       = data['source_objects_join_mode']
+    profile_close_mode             = data['profile_close_mode']
     results_join_mode              = data['results_join_mode']
     verbose                        = data['verbose']
     use_cache_of_straight_skeleton = data['use_cache_of_straight_skeleton']
@@ -144,6 +146,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         res_type,
         force_z_zero,
         source_objects_join_mode,
+        profile_close_mode,
         results_join_mode,
         verbose
     ]
@@ -202,6 +205,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             res_type,
             force_z_zero,
             source_objects_join_mode,
+            profile_close_mode,
             results_join_mode,
             verbose,
             use_cache_of_straight_skeleton,

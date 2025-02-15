@@ -1295,6 +1295,7 @@ namespace CGAL {
           bool force_z_zero,              // Обязательное преобразование Z=0 при любых обстоятельствах (иногда при редактировании модели можно двигать курсор в плоскости XY b получать Z "слегка" отличный от 0).
         // <image url="..\code_images\file_0030.png" scale=".3"/>
            int source_objects_join_mode,    // Предобработка исходных Meshes: # 0 - split - разделить на отдельные независимые-объекты, 1 - keep - оставить как есть, 2 - merge all meshes - объеденить в один большой объект.
+           int profile_close_mode,          // Открытие/закрытие последнего сегмента в контуре. 0-Открыт, 1-закрыт
            int results_join_mode,           // Что сделать с полученными mesh: # 0 - split - разделить на отдельные mesh-объекты, 1 - keep - оставить в своих объектах, 2 - merge all meshes - объеденить в один большой объект. В этом ноде дополнительные параметры к объектам не нужны
           bool verbose,                     // Подробный вывод
           bool use_cache_of_straight_skeleton, // Применять кэш при рассчёте Offsets of Straight Skeleton
@@ -2133,7 +2134,6 @@ namespace CGAL {
                   }
                 }
 
-                //std::vector<POMS> vect_polygon1_oioa;
                 for (auto& object1 : objects) {
                   for (auto& polygon_with_holes1 : object1.vect_polygons_with_holes) {
                     // Отсортировать по offsets. Будет удобно считать, если при увеличении отступа пропадёт контур,то и считать следующие бОльшие контуры не надо
@@ -2221,15 +2221,6 @@ namespace CGAL {
                           const char* byte_buffer = serialized_data.c_str();
                           size_t length = serialized_data.length();
 
-                          //std::vector<unsigned char> byte_buffer;
-                          //byte_buffer.reserve(vect__points.size() * sizeof(FT));
-                          //for (const auto& f : vect__points) {
-                          //  int sizeof_FT = sizeof(FT);
-                          //  unsigned char bytes[sizeof(FT)];
-                          //  FT_to_bytes(f, bytes);
-                          //  byte_buffer.insert(byte_buffer.end(), bytes, bytes + sizeof(FT));
-                          //}
-
                           // Создаем объект для вычисления CRC-32
                           boost::crc_32_type crc;
                           //crc.process_bytes(&byte_buffer[0], byte_buffer.size());
@@ -2239,10 +2230,6 @@ namespace CGAL {
                           if (verbose == true) {
                             mtx_.lock();
                             printf("\n " VAL2STR(Err::_0055) ". ss_id=% 2zu; crc=% 2u", ss_id_counter, crc_val);
-                            //printf("\npoints: ");
-                            //for (auto p : vect__points) {
-                            //  printf(" % 2.8lf", CGAL::to_double(p) );
-                            //}
                             mtx_.unlock();
                           }
                         }
@@ -2251,22 +2238,29 @@ namespace CGAL {
                       CGAL::Real_timer timer2;
                       timer2.start();
                       try {
+                        // Если рассчёт не требует кэша или в кэше ничего нет, то выполнить рассчёт SS в любом случае.
                         if (use_cache_of_straight_skeleton==false || 
-                          map__crc__ss.find(crc_val) == map__crc__ss.end()) {
+                          map__crc__ss.find(crc_val) == map__crc__ss.end()
+                        ) {
                           polygon1_oioa.ss = ssb.construct_skeleton();
-                          map__crc__ss[crc_val] = polygon1_oioa.ss;
+                          // ... и не запоминать (вдруг утечка памяти какая-то?). Примечание: сюда можно попасть и при use_cache_of_straight_skeleton == true, если в кэше ничего нет.
+                          if (use_cache_of_straight_skeleton == true) {
+                            map__crc__ss[crc_val] = polygon1_oioa.ss;
+                          }
                         } else {
                           polygon1_oioa.ss = map__crc__ss[crc_val];
                           if (verbose == true) {
+                            mtx_.lock();
                             printf("\n " VAL2STR(Err::_0056) ". ss_id=% 2zu; used as cached with crc=% 2u", ss_id_counter, crc_val);
+                            mtx_.unlock();
                           }
                         }
                       } catch (std::exception _ex) {
                         // При ошибке исходный SS останется null
                       }
                       
+                      timer2.stop();
                       if (verbose == true) {
-                        timer2.stop();
                         mtx_.lock();
                         summ_timer2 += timer2.time();
                         vect_polygon1_oioa_rest--;
@@ -2318,9 +2312,6 @@ namespace CGAL {
 #endif
                         boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &mtx_, &verbose, &res_contours] {
                           ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset. На один offset может быть несколько контуров.
-                          //std::unordered_map<HDS_Halfedge_const_handle, Point_2> map_halfedge_to_offset_points; // Сопоставление точек пересечения offset с SS по halfedge.
-                          //OffsetBuilder offsetBuilder(*polygon1_oioa.ss); // Instantiate the offset builder with the skeleton
-                          //offsetBuilder.construct_offset_contours(abs(oioa1.offset)/*Здесь считаются и отрицательные offsets для внешних контуров, но данные подготовлены для инверсии, это учтётся позже*/, std::back_inserter(offset_contours)); // Obtain the offset contours
 
                           CGAL::Real_timer timer2; // Общее время рассчёта всех SS (вместе с загрузкой данных)
                           timer2.start();
@@ -2328,7 +2319,7 @@ namespace CGAL {
                           timer2.stop();
                           if (verbose == true) {
                             mtx_.lock();
-                            printf("\n " VAL2STR(Err::_0046) ". SS 2D Offset. building offset ss_id: % 4zd, build time: %.5g", oioa1.ss_id, timer2.time());
+                            printf("\n " VAL2STR(Err::_0046) ". SS 2D Offset. building offset ss_id: % 4zd, % 3d, % 10.5f, build time: %.5g", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time());
                             mtx_.unlock();
                           }
 
@@ -2815,7 +2806,6 @@ namespace CGAL {
                               mesh_data.map_vector_face_points_id[ss_face_id] = vertex_face_indexes; // Сюда уже не пропускается face, если точек меньше 3, хотя сами точки запоминаются.
 
                               // Сформировать из новых индексов новый face.
-                              //auto& face_index = mesh_ss.add_face(vect_vertex_indexes);
                               // Добавить в новый face атрибут с параметрами ss_id и номер сквозной нумерации <image url="..\code_images\file_0051.png" scale=".2"/>
                               //mesh_ss_property_map[face_index] = MeshFacePropertyStruct(ss_halfedge_point_2.ss_id, face_continuous_numbering++);
 
@@ -2861,10 +2851,7 @@ namespace CGAL {
                               mesh_ss_property_map[face_index] = MeshFacePropertyStruct(poms.ss_id, poms.ss_type==SS_TYPE::POSITIVE ? MeshFacePropertyStruct::SS_SIGN::POSITIVE : poms.ss_type==SS_TYPE::NEGATIVE_WITH_EXTERNAL_FRAME ||poms.ss_type==SS_TYPE::NEGATIVE_INVERTED_HOLE ? MeshFacePropertyStruct::SS_SIGN::NEGATIVE : MeshFacePropertyStruct::SS_SIGN::UNDEFINED, ss_face_id, face_continuous_numbering);
                               face_continuous_numbering++;
                             }
-                            //vect__oioa__offset_ss_params[0].vect_vect_ss_face_points.push_back(vect_ss_face_points);
                             // Тут получена Mesh SS, у которой не надо делать merge points. Вроде как теперь дальнейший merge нескольких mesh_ss должно пройти быстрее?
-
-
                             // 
                             // Примечание: ввиду того, что offset пока не учитывается, то геометрия ss хранится только в первом элементе map__object_id__ss_id__OIOA_OFFSET_SS_PARAMS[object_id][ss_id][0]
                             // Примечание 2: подумать, как вообще вынести отсюда сохранение mesh_ss в map__object_id__ss_id__OIOA_OFFSET_SS_PARAMS.
@@ -3083,7 +3070,6 @@ namespace CGAL {
                         {
                           CGAL::Real_timer timer_bevel; // Тратится около 3% времени на merge и расчёт ajacent faces.
                           double t1 = 0;
-                          //timer_bevel.start();
                           // Примечание: Все SS являются плоскими объектами, имеющими один или больше контуров: первый контур всегда внешний (если есть один, то это только внешний контур), остальные
                           // всегда внутренние. Рекурсии у SS нет! Если есть внутренние контуры, то топологически SS является двусторонним - внешняя и внутренняя стороны (не верх или низ как у плоскости,
                           // а именно контуры).
@@ -3097,18 +3083,12 @@ namespace CGAL {
                             /// <summary>
                             /// Информация об одном offset, относящемся к имеющемуся ss.
                             /// </summary>
-
                             FT  oioa_offset;
                             int oioa_offset_index;
                             FT  oioa_altitude;
 
                             /// <summary>
-                            /// Какие точки пересечения с offset у текущего SS соответствуют halfedge текущего offset
-                            /// </summary>
-                            //std::shared_ptr<Ss> ss;
-
-                            /// <summary>
-                            /// В каких точках пересекается ss с offset из oioa
+                            /// В каких точках на плоскости пересекается ss с offset из oioa
                             /// </summary>
                             std::unordered_map<HDS_Halfedge_const_handle, Point_2> map__halfedge__offset_points;
 
@@ -3119,7 +3099,6 @@ namespace CGAL {
 
                           // Список всех offset у ss_id с информацией какие halfedge от исходного SS пересекаются с этим offset с сортировкой по offset_index (от меньшего к большему)
                           std::map<int /*ss_id*/, std::vector<SS_Offset_HalfEdge_Intersections_Point_2>> map__ss_id__he_intersections_point2;
-                          //std::map<int /*ss_id*/, std::shared_ptr<Ss> /*ss*/> map__ss_id__ss;
 
                           // Обработку контуров надо вести либо по map_adjacent_mesh_faces (если есть отрицательные SS), либо по всем faces от рассчитанных SS (если SS только положительные).
                           {
@@ -3130,7 +3109,6 @@ namespace CGAL {
                                     map__ss_id__he_intersections_point2[he1.ss_id] = std::vector<SS_Offset_HalfEdge_Intersections_Point_2>();
                                   }
                                   map__ss_id__he_intersections_point2[he1.ss_id].push_back(SS_Offset_HalfEdge_Intersections_Point_2(offset_params.oioa1.offset, offset_params.oioa1.offset_index, offset_params.oioa1.altitude, /*he1.ss,*/ he1.map__halfedge__offset_points));
-                                  //map__ss_id__ss[he1.ss_id] = he1.ss;
                                 }
                               }
                             }
@@ -3196,13 +3174,18 @@ namespace CGAL {
                               int index = -1;
 
                               /// <summary>
-                              /// Если эта точка типа POINT, то при рассчёте BEVEL SS записать в этот вектор индекс точки, в кого эта точка преобразована.
-                              /// Примечание: Точка типа POINT не может напрямую использоваться при построении faces, ограниченной двумя offset, т.к. пары offset или цепочки offset могут пересекать эту точку несколько раз.
+                              /// Если эта точка типа PROJECT_POINT, то при рассчёте BEVEL SS записать в этот вектор индекс точки, в кого эта точка преобразована.
+                              /// Примечание: Точка типа PROJECT_POINT не может напрямую использоваться при построении faces, ограниченной двумя offset, т.к. пары offset или цепочки offset могут пересекать эту точку несколько раз.
                               /// При этом сами offset определены однозначно и у них дубликатов быть не может, даже если они совпадают. Также возможны ситуации, что точка никогда не понадобится, если эта точка не будет 
                               /// находится между двумя offsets (хотя в будущем точка может потребоваться для caps-ов). Применяется для справки. Непосредственно для обработки bevel - не нужен.
                               /// <image url="..\code_images\file_0073.png" scale=".2"/>
                               /// </summary>
                               std::vector<std::uint32_t> beveled_indexes; // для тестов. Для рассчётов не требуется
+                              /// <summary>
+                              /// Важно для точки типа PROJECT_POINT. Индекс точки из какой проектной точки она получена.
+                              /// </summary>
+                              int project_point_index;
+                              int application_index;
 
                               /// <summary>
                               /// Сама точка. Только высота по Z у точки рассчитывается не всегда. Высота заранее известна только у точек, лежащих на offset
@@ -3213,12 +3196,12 @@ namespace CGAL {
                               Point_3 point;
 
                               /// <summary>
-                              /// Рассчитана ли высота у точки? (true - рассчитана, false - не рассчитана)
+                              /// Рассчитана ли высота у точки? (true - рассчитана, false - не рассчитана). Важно только для точек типа PROJECT_POINT
                               /// </summary>
                               bool is_altitude_calc;
 
                               /// <summary>
-                              /// является ли точка внешней? Важно только для крайнего контура SS. При построении BEVELED SS важно знать, является ли точка крайней или нет. Если она крайняя,
+                              /// Является ли точка внешней? Важно только для крайнего контура SS. При построении BEVELED SS важно знать, является ли точка крайней или нет. Если она крайняя,
                               /// то на отрицательных SS она не будет участвовать в построении BEVELED SS или Caps.
                               /// </summary>
                               bool is_border; // Забавно, что в SS используется термин is_boundary, а в mesh - is_border. Т.к. работаю с mesh, то использую is_border.
@@ -3231,16 +3214,22 @@ namespace CGAL {
                               int vertex_id;
 
                               /// <summary>
-                              /// Для точек типа POINT задаёт величину time, на значении которой образовалась точка (чтобы потом сравнить offset-ы между которыми находится эта
+                              /// Для точек типа PROJECT_POINT задаёт величину time, на значении которой образовалась точка (чтобы потом сравнить offset-ы между которыми находится эта
                               /// точка и определить её высоту). См. функцию construct_lateral_faces.
                               /// </summary>
                               FT event_time;
 
                               enum POINT_TYPE {
+                                UNDEFINED=-1,
                                 /// <summary>
-                                /// Точка из контура (не пересекающая edge). Одна и таже точка типа POINT может встречаться несколько раз при обработке переходов offset через эту точку при реверсных направлениях пар offset.
+                                /// Применяется к точек типа PROJECT_POINT после её рассчёта в определённом ss_id.
                                 /// </summary>
-                                POINT,
+                                APPLICATED_PROJECT_POINT,
+
+                                /// <summary>
+                                /// Точка из контура (не пересекающая edge). Одна и таже точка типа PROJECT_POINT может встречаться несколько раз при обработке переходов offset через эту точку при реверсных направлениях пар offset.
+                                /// </summary>
+                                PROJECT_POINT,
 
                                 /// <summary>
                                 /// Точка из offset. Точка пересекает offset вверх (в контуре. В faces это направление должно учитывать относительные положения edges, из которых строится face между 2-мя offset)
@@ -3252,19 +3241,20 @@ namespace CGAL {
                                 /// </summary>
                                 DOWN,
                               };
+                              POINT_TYPE point_type;
 
-                              /// Параметры offset точки
+                              /// Параметры offset по которым строилась эта точка
                               FT  oioa_offset;
                               int oioa_offset_index;
                               FT  oioa_altitude;
 
-                              SHAPE_POINT(int _index, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, bool _is_border, int _ss_id, MeshFacePropertyStruct::SS_SIGN _ss_sign, int _vertex_id, FT _event_time)
-                                : index(_index), point(_point), is_altitude_calc(_is_altitude_calc), oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude), is_border(_is_border), ss_id(_ss_id), ss_sign(_ss_sign), vertex_id(_vertex_id), event_time(_event_time) {
+                              SHAPE_POINT(int _index, int _project_point_index, POINT_TYPE _point_type, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, bool _is_border, int _ss_id, MeshFacePropertyStruct::SS_SIGN _ss_sign, int _vertex_id, int _application_index, FT _event_time)
+                                : index(_index), project_point_index(_project_point_index), point_type(_point_type), point(_point), is_altitude_calc(_is_altitude_calc), oioa_offset(_oioa_offset), oioa_offset_index(_oioa_offset_index), oioa_altitude(_oioa_altitude), is_border(_is_border), ss_id(_ss_id), ss_sign(_ss_sign), vertex_id(_vertex_id), application_index(_application_index), event_time(_event_time) {
 
                               }
 
                               SHAPE_POINT()
-                                :index(-1), point(0.0, 0.0, 0.0), is_altitude_calc(false), oioa_offset(0.0), oioa_offset_index(-1), oioa_altitude(0.0), is_border(false), ss_id(0), ss_sign(MeshFacePropertyStruct::SS_SIGN::UNDEFINED), vertex_id(0), event_time(0.0) {
+                                :index(-1), project_point_index(-1), point_type(POINT_TYPE::UNDEFINED), point(0.0, 0.0, 0.0), is_altitude_calc(false), oioa_offset(0.0), oioa_offset_index(-1), oioa_altitude(0.0), is_border(false), ss_id(0), ss_sign(MeshFacePropertyStruct::SS_SIGN::UNDEFINED), vertex_id(0), application_index(-1), event_time(0.0) {
 
                               }
                             };
@@ -3284,7 +3274,7 @@ namespace CGAL {
                               int ss_intersects_he_points_counter = 0;
 
                               /// <summary>
-                              /// Внутренний счётчик точек при создании точек типа POINT (поэтому Ppoint). И он отрицательный для таких точек. Эти точки
+                              /// Внутренний счётчик точек при создании точек типа PROJECT_POINT (поэтому Ppoint). И он отрицательный для таких точек. Эти точки
                               /// в будущем не будут использоваться напрямую, а будут участвовать в построении BEVELED SS, потому что могут встречаться в
                               /// конечной фигуре по много раз. (TODO: Сделать скрин лесенки, проходящей нат такой точкой, а потом объёмное изображение
                               /// ситуации). Примечание: сделан отрицательным, чтобы не пересчитывать точки, которые уже точно пойдут в финальную фигуру
@@ -3306,19 +3296,30 @@ namespace CGAL {
                               std::map<std::tuple<
                                 int /*ss_id*/,
                                 int /*vertex_id*/,
-                                int /*индекс профиля profile_face_index (раньше mesh был один на все профильные face, а теперь он разделён по отдельности на подобъекты и об этом нужно помнить с помощью этого индекса)*/,
-                                int /*количество использований. -1 - точка типа POINT, которая ещё не использовалась. 0 и больше - уже применялась*/>,
+                                int, // индекс профиля profile_face_index (раньше mesh был один на все профильные face, а теперь он разделён по отдельности на подобъекты и об этом нужно помнить с помощью этого индекса) <image url="..\code_images\file_0087.png" scale=".1"/>
+                                int /*количество использований. -1 - точка типа PROJECT_POINT, которая ещё не использовалась. 0 и больше - уже применялась*/>,
                                 int /*уникальный идентификатор точки*/
                               > map__ss_id__vertex_id;
 
-                              int get_index_or_append_he__offset_index(int ss_id, HDS_Halfedge_const_handle& he_handle, int offset_index, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, MeshFacePropertyStruct::SS_SIGN ss_sign) {
+                              int get_index_or_append_he__offset_index(
+                                int ss_id,
+                                SHAPE_POINT::POINT_TYPE point_type,
+                                HDS_Halfedge_const_handle& he_handle,
+                                int offset_index,
+                                Point_3& _point,
+                                bool _is_altitude_calc,
+                                FT _oioa_offset,
+                                int _oioa_offset_index,
+                                FT _oioa_altitude,
+                                MeshFacePropertyStruct::SS_SIGN ss_sign
+                              ) {
                                 auto& ss_id__he_handle__offset_index = std::tuple(ss_id, he_handle, offset_index);
                                 auto& it = map__ss_id__he_handle.find(ss_id__he_handle__offset_index);
                                 int res_counter = -1;
                                 if (it == map__ss_id__he_handle.end()) {
                                   res_counter = ss_intersects_he_points_counter++;
                                   map__ss_id__he_handle[ss_id__he_handle__offset_index] = res_counter;
-                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, false /*точки пересечения точно не могут быть крайними, т.к. они находятся между точками SS*/, ss_id, ss_sign, 0 /*это не тип POINT,значение не важно*/, 0.0 /*event_time - тут не имеет значения*/);
+                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, -1 /* для точки пересечения he не важно. Важно только для точки типа PROJECT_POINT */, point_type, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, false /*точки пересечения точно не могут быть крайними, т.к. они находятся между точками SS*/, ss_id, ss_sign, 0 /*это не тип PROJECT_POINT,значение не важно*/, -1 /*_application_index для точки пересечения he не важен */, 0.0 /*event_time - тут не имеет значения*/);
                                 } else {
                                   auto& [tpl, _res_counter] = (*it);
                                   res_counter = _res_counter;
@@ -3327,20 +3328,33 @@ namespace CGAL {
                               };
 
                               /// <summary>
-                              /// Добавить точку типа POINT в отрицательную зону проиндексированных точек. Это предварительная точка, которая будет использоваться для рассчёта BEVELED SS
+                              /// Добавить точку типа PROJECT_POINT в отрицательную зону проиндексированных точек. Это предварительная точка, которая будет использоваться для рассчёта BEVELED SS
                               /// (это точка не является точкой пересечения he с SS, высота её неизвестна, и будет рассчитана позже по соседним точкам в используемом face. Если точка используется
                               /// в нескольких face, то рассчитывать её нужно только один раз, после этого у неё выставляется признак и если она встретится в другом face, то уже будет известно, 
                               /// что она рассчитана).
                               /// </summary>
-                              int get_index_or_append_vertex_id(int ss_id, MeshFacePropertyStruct::SS_SIGN ss_sign, int vertex_id, Point_3& _point, bool _is_altitude_calc, FT _oioa_offset, int _oioa_offset_index, FT _oioa_altitude, bool is_border, FT _event_time) {
-                                auto& ss_id__vertex_id = std::tuple(ss_id, vertex_id, -1/*для профильной точки profile_face_index не важен*/, -1);
+                              int get_index_or_append_vertex_id(
+                                int   ss_id,
+                                MeshFacePropertyStruct::SS_SIGN ss_sign,
+                                int   vertex_id,
+                                SHAPE_POINT::POINT_TYPE point_type,
+                                Point_3& _point,
+                                bool _is_altitude_calc,
+                                FT   _oioa_offset,
+                                int  _oioa_offset_index,
+                                FT   _oioa_altitude,
+                                bool  is_border,
+                                int   application_index,
+                                FT   _event_time
+                              ) {
+                                auto& ss_id__vertex_id = std::tuple(ss_id, vertex_id, -1/*при инициализации профильной точки profile_face_index не важен, т.к. эта точка не используется как реальная, а является пока ещё только "проектной" и на её основе позже будет создано столько точек, сколько раз она потребуется при построении.*/, -1);
                                 auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 int res_counter = -1;
                                 if (it == map__ss_id__vertex_id.end()) {
                                   // Если точка не найдена, то создать её с новым индексом
                                   res_counter = ss_ppoints_counter--;
                                   map__ss_id__vertex_id[ss_id__vertex_id] = res_counter;
-                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, is_border, ss_id, ss_sign, vertex_id, _event_time);
+                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, -1 /* project_point_index - изначально она ни на кого не ссылается */, point_type, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, is_border, ss_id, ss_sign, vertex_id, application_index, _event_time);
                                 } else {
                                   auto& [tpl, _res_counter] = (*it);
                                   res_counter = _res_counter;
@@ -3349,13 +3363,13 @@ namespace CGAL {
                               };
 
                               /// <summary>
-                              /// Превратить точку типа POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
+                              /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
                               /// </summary>
-                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_counter) {
+                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_index) {
                                 // Получить проектную точку
                                 auto& ppoint = map__point_index__calc_point[point_index];
                                 // Проверить, имеется ли у неё указанное применение:
-                                auto& ss_id__vertex_id = std::tuple(ppoint.ss_id, ppoint.vertex_id, profile_face_index, application_counter);
+                                auto& ss_id__vertex_id = std::tuple(ppoint.ss_id, ppoint.vertex_id, profile_face_index, application_index);
                                 auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 int res_counter = -1;
                                 if (it == map__ss_id__vertex_id.end()) {
@@ -3363,10 +3377,14 @@ namespace CGAL {
                                   res_counter = ss_intersects_he_points_counter++;
                                   // Запомнить её индекс
                                   map__ss_id__vertex_id[ss_id__vertex_id] = res_counter;
-                                  // Запомнить индексы точек, в которые была преобразована SS точка POINT
+                                  // Запомнить индексы точек, в которые была преобразована SS точка PROJECT_POINT
                                   ppoint.beveled_indexes.push_back(res_counter);
                                   // Создать реальную точку из проектной
-                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(res_counter, Point_3(ppoint.point),
+                                  map__point_index__calc_point[res_counter] = SHAPE_POINT(
+                                    res_counter,
+                                    point_index, /*Из какой проектной точки она получена*/
+                                    SHAPE_POINT::POINT_TYPE::APPLICATED_PROJECT_POINT,
+                                    Point_3(ppoint.point),
                                     false /*положение по высоте ещё не рассчитывалось*/,
                                     0.0 /*offset - не имеет значения, это не offset*/,
                                     0 /*_oioa_offset_index - не имеет значения, это не offset*/,
@@ -3374,8 +3392,9 @@ namespace CGAL {
                                     ppoint.is_border /*не важно, но сохраню*/,
                                     ppoint.ss_id,
                                     ppoint.ss_sign /*вроде не важно, но сохраню*/,
-                                    ppoint.vertex_id /*Используется для поиска, что такая точка типа POINT уже применялась/использовалась*/,
-                                    ppoint.event_time /*Используется для повтроения высоты точки, если она находится между двумя offset-ами*/
+                                    ppoint.vertex_id /*Используется для поиска, что такая точка типа PROJECT_POINT уже применялась/использовалась*/,
+                                    application_index,
+                                    ppoint.event_time /*Используется для повторения высоты точки, если она находится между двумя offset-ами*/
                                   );
                                   // Запомнить в новой точке индекс, от которого эта точка получена. Для тестов.
                                   map__point_index__calc_point[res_counter].beveled_indexes.push_back(ppoint.index);
@@ -3401,7 +3420,7 @@ namespace CGAL {
                             /// кроме индекса самой точки надо ещё помнить в каком направлении (slope) алгоритм через неё проходит при обходе faces против часовой стрелки.
                             /// Если SHAPE_POINT на месте пересечения находится на границе между двух faces, то в контур она попадает в двух экземплярах
                             /// для обоих соседних faces (соседние - в общем смысле, а не только смежные в сегменте) с учётом slope (типа UP или DOWN).
-                            /// Если SHAPE_POINT типа POINT, то она попадает в контур в одном экземпляре и её slope не учитывается.
+                            /// Если SHAPE_POINT типа PROJECT_POINT, то она попадает в контур в одном экземпляре и её slope не учитывается.
                             /// Пример 1: <image url="..\code_images\file_0075.png" scale=".4"/>
                             /// Пример 2: <image url="..\code_images\file_0079.png" scale=".2"/>
                             /// </summary>
@@ -3424,7 +3443,7 @@ namespace CGAL {
                             // <image url="..\code_images\file_0065.png" scale=".2"/>
                             std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector<MeshFacePropertyStruct>>>              map__ss_id__mesh_face_id__segment_faces; // Рассчитать segment_faces
                             std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector<CONTOUR_SHAPE_POINT>>>                 map__ss_id__mesh_face_id__segment_contour; // Преобразовать segment_faces в segment_contour
-                            std::map<int /*ss_id*/, std::map<int /*индекс face профиля (порядковый номер)*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>>     map__ss_id__profile_face_index__mesh_face_id__faces_info; // Состав одного сегмента (сразу привязывается к mesh_face_id), распределённый по входным элементам геометрии профиля (в основном по faces профиля. В профиле несколько faces и других элементов).
+                            std::map<int /*индекс face профиля (порядковый номер)*/, std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>> map__profile_face_index__ss_id__mesh_face_id__faces_info; // Состав одного сегмента (сразу привязывается к mesh_face_id), распределённый по входным элементам геометрии профиля (в основном по faces профиля. В профиле несколько faces и других элементов).
 
                             {
                               {
@@ -3538,7 +3557,6 @@ namespace CGAL {
                                               hds_h_slope == CGAL::POSITIVE && segment_faces_I.ss_sign == MeshFacePropertyStruct::SS_SIGN::NEGATIVE /* -SS */
                                               ) {
                                               // <image url="..\code_images\file_0076.png" scale=".3"/>
-                                              //for (auto& intersection_points : map_ss_id_he_intersections_point2[segment_faces_I.ss_id] /*ss_id брать не из цикла, а из рассматриваемой segment_faces_I*/) 
                                               for (auto& elem_it = map__ss_id__he_intersections_point2[segment_faces_I.ss_id /* ss_id брать не из цикла, а из рассматриваемой segment_faces_I, чтобы искать пересечения offset-ов со своим he */].rbegin(); elem_it != map__ss_id__he_intersections_point2[segment_faces_I.ss_id].rend(); ++elem_it) {
                                                 auto& intersection_points = *elem_it;
                                                 auto& offset0_he_intersect_iter = intersection_points.map__halfedge__offset_points.find(hds_offset_h);
@@ -3590,7 +3608,18 @@ namespace CGAL {
                                                   }
                                                   // TODO - так-то их можно сразу обрабатывать на месте обнаружения. Подумать, как сделать это прямо в точке обнаружения выше.
                                                   for (auto& he_offset : vect__intersection_point_info) {
-                                                    int point_index = calc_points.get_index_or_append_he__offset_index(ss_id, hds_offset_h, he_offset.oioa_offset_index, Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa_altitude), true, he_offset.oioa_offset, he_offset.oioa_offset_index, he_offset.oioa_altitude, he_offset.ss_sign);
+                                                    int point_index = calc_points.get_index_or_append_he__offset_index(
+                                                      ss_id,
+                                                      pt,
+                                                      hds_offset_h,
+                                                      he_offset.oioa_offset_index,
+                                                      Point_3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa_altitude),
+                                                      true,
+                                                      he_offset.oioa_offset,
+                                                      he_offset.oioa_offset_index,
+                                                      he_offset.oioa_altitude,
+                                                      he_offset.ss_sign
+                                                    );
                                                     vect_contour_shape_point.push_back(CONTOUR_SHAPE_POINT(point_index, pt));
                                                   }
                                                 }
@@ -3611,8 +3640,22 @@ namespace CGAL {
                                                   he_vertex_time = -he_vertex_time;
                                                 }
                                                 bool is_border = hds_h->is_border();
-                                                int point_index = calc_points.get_index_or_append_vertex_id(segment_faces_I.ss_id, segment_faces_I.ss_sign, he_vertex_id, Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/), false /*altitude не рассчитана, будет считаться позже*/, 0.0, -1 /*Это точка контура, поэтому offset-а у неё нет*/, 0.0, is_border, he_vertex_time);
-                                                vect_contour_shape_point.push_back(CONTOUR_SHAPE_POINT(point_index, SHAPE_POINT::POINT_TYPE::POINT));
+                                                SHAPE_POINT::POINT_TYPE pt = SHAPE_POINT::POINT_TYPE::PROJECT_POINT;
+                                                int point_index = calc_points.get_index_or_append_vertex_id(
+                                                  segment_faces_I.ss_id,
+                                                  segment_faces_I.ss_sign,
+                                                  he_vertex_id,
+                                                  pt,
+                                                  Point_3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/),
+                                                  false /*altitude не рассчитана, будет считаться позже*/,
+                                                  0.0,
+                                                  -1 /*Это точка контура, поэтому offset-а у неё нет*/,
+                                                  0.0,
+                                                  is_border,
+                                                  -1 /*_application_index для точки пересечения he не важен */,
+                                                  he_vertex_time
+                                                );
+                                                vect_contour_shape_point.push_back(CONTOUR_SHAPE_POINT(point_index, pt));
                                               }
                                             }
                                             vect_segment__halfedges_handle.back().push_back(hds_offset_h);
@@ -3646,7 +3689,7 @@ namespace CGAL {
                                 // Параметры курсора для обхода точек
                                 struct COLLECT_CURSOR {
                                   /// <summary>
-                                  /// (true) Собирать или (false) пропускать точки тип POINT
+                                  /// (true) Собирать или (false) пропускать точки тип PROJECT_POINT
                                   /// </summary>
                                   bool do_collect_points;
 
@@ -3673,7 +3716,7 @@ namespace CGAL {
                                   SHAPE_POINT::POINT_TYPE offset_type0;
 
                                   /// <summary>
-                                  /// Индекс для второго пересечения, после которого надо добавить новую точку POINT (+ добавить эту точку)
+                                  /// Индекс для второго пересечения, после которого надо добавить новую точку PROJECT_POINT (+ добавить эту точку)
                                   /// </summary>
                                   int offset_index1;
 
@@ -3717,10 +3760,6 @@ namespace CGAL {
                                       });
                                     timer1.stop();
                                     summ_oioa_timer += timer1.time();
-                                  }
-
-                                  if (map__ss_id__profile_face_index__mesh_face_id__faces_info.find(ss_id) == map__ss_id__profile_face_index__mesh_face_id__faces_info.end()) {
-                                    map__ss_id__profile_face_index__mesh_face_id__faces_info[ss_id] = std::map<int /*mesh_face_id*/, std::map<int, std::vector/*faces*/<FACE_INFO>>>();
                                   }
 
                                   {
@@ -3783,7 +3822,7 @@ namespace CGAL {
                                       for (auto& face : vect__offset_faces) {
                                         std::vector<EDGE_INFO> vect__edges;
                                         // Добавить в начало вектора замыкающий edge:
-                                        if (face.size() > 2) {
+                                        if (profile_close_mode && face.size() > 2) {
                                           int last_index = face.size() - 1;
                                           int first_index = 0;
                                           vect__edges.push_back(EDGE_INFO(
@@ -3815,35 +3854,30 @@ namespace CGAL {
                                       }
 
                                       {
-                                        // <image url="..\code_images\file_0082.png" scale=".3"/>
+                                        // <image url="..\code_images\file_0082.png" scale=".3"/> В некоторых случаях производительность поднимается очень хорошо.
                                         const int threadNumbers = boost::thread::hardware_concurrency();
                                         boost::asio::thread_pool pool1(threadNumbers);
                                         boost::mutex mtx_;
 
 #define _MMULTITHREAD
-#ifdef _MMULTITHREAD
-                                        //if (verbose == true) {
-                                        //  printf("\n " VAL2STR(Err::_0062) ". SS 2D Offset. Calc faces are multithread");
-                                        //}
-#else
-                                        if (verbose == true) {
-                                          printf("\n " VAL2STR(Err::_0063) ". SS 2D Offset. Calc faces as singlethread");
-                                        }
-#endif
-                                        //for (auto& vect__edges : vect__faces__edges) {
                                         for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
+                                          // Для увеличения производительности, чтобы позже не делать merge полученных mesh на одном объекте, в случае если пользователь и так выбрал режимы,
+                                          // при которых результирующий mesh пока ещё состоит из частей, разделённых на ss_id и profile_face_index и которые в некоторых режимах (1/2) потребуется
+                                          // объеденить, то это можно сделать прямо сейчас:
                                           int profile_face_index = I;
                                           auto& vect__edges = vect__faces__edges[I];
                                           if (vect__edges.size() >= 2) {
-                                            map__ss_id__profile_face_index__mesh_face_id__faces_info[ss_id][profile_face_index] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                            if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
+                                              map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
+                                            }
+                                            if (map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].find(ss_id) == map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].end()) {
+                                              map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                            }
                                             for (auto& [mesh_face_id, vect_segment_points] : map__mesh_face_id__segment_points) {
-                                              map__ss_id__profile_face_index__mesh_face_id__faces_info[ss_id][profile_face_index][mesh_face_id] = std::vector<FACE_INFO>();
                                               // Считать только если есть минимум пара offset
                                               // TODO - в будущем учесть, что высоты могут быть одинаковыми и caps-ы могут перекрыться. Пока это не учитывается.
-                                              //if (vect_object_offsets.size() >= 2) {
-#ifdef _MMULTITHREAD
-                                              boost::asio::post(pool1, [&mesh_face_id, &vect_segment_points, &ss_id, &map__ss_id__profile_face_index__mesh_face_id__faces_info, &vect__edges, &vect_object_offsets, &calc_points, profile_face_index , &mtx_] {
-#endif
+
+                                              boost::asio::post(pool1, [profile_face_index, &ss_id, &mesh_face_id, &vect_segment_points, &map__profile_face_index__ss_id__mesh_face_id__faces_info, &vect__edges, &vect_object_offsets, &calc_points, &mtx_] {
                                                 ////vect_edges.push_back(EDGE_INFO(0, 0.0, true, vect_oioa[0].offset_index, vect_oioa[0].offset_index, true)); // Первый индекс будет с caps-ом - update - пока пропускаю
                                                 //for (int I = 0; I <= (int)vect_object_offsets.size() - 2; I++) {
                                                 //  vect_edges.push_back(EDGE_INFO(vect_object_offsets[I + 0].offset_index, vect_object_offsets[I + 0].offset, vect_object_offsets[I + 0].altitude, false, vect_object_offsets[I + 1].offset_index, vect_object_offsets[I + 1].offset, vect_object_offsets[I + 1].altitude, false));
@@ -3874,7 +3908,7 @@ namespace CGAL {
                                                   auto& offset1 = elem1.offset;
 
                                                   // Подсчёт faces всегда выполняется против часовой стрелки от первой точки после старта.
-                                                  COLLECT_CURSOR& cursor = COLLECT_CURSOR(false, false, false, -1, SHAPE_POINT::POINT_TYPE::POINT, -1, SHAPE_POINT::POINT_TYPE::POINT);
+                                                  COLLECT_CURSOR& cursor = COLLECT_CURSOR(false, false, false, -1, SHAPE_POINT::POINT_TYPE::PROJECT_POINT, -1, SHAPE_POINT::POINT_TYPE::PROJECT_POINT);
                                                   // Рассчёт зависит от того в каком отношении к 0-0 находятся рассматриваемые offset. Мысленно представляем куда движется стерка обхода и
                                                   // в какой последовательности она должна пересечь offset-ы.
                                                   if (offset0 < 0 && offset1 < 0) {
@@ -3941,11 +3975,11 @@ namespace CGAL {
                                                       }
                                                     }
                                                   } else if (offset0 < 0 && offset1 >= 0) {
-                                                    // Добавить новый face и разрешить добавлять в него точки типа POINT сразу
+                                                    // Добавить новый face и разрешить добавлять в него точки типа PROJECT_POINT сразу
                                                     cursor = COLLECT_CURSOR(true, false, false, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::UP);
                                                     vect_faces.push_back(FACE_INFO(_oioa0_offset_index, _oioa0_offset, _oioa0_altitude, _oioa1_offset_index, _oioa1_offset, _oioa1_altitude, cursor.do_reverse));
                                                   } else if (offset0 >= 0 && offset1 < 0) {
-                                                    // Добавить новый face и разрешить добавлять в него точки типа POINT сразу
+                                                    // Добавить новый face и разрешить добавлять в него точки типа PROJECT_POINT сразу
                                                     cursor = COLLECT_CURSOR(true, false, true, _oioa0_offset_index, SHAPE_POINT::POINT_TYPE::DOWN, _oioa1_offset_index, SHAPE_POINT::POINT_TYPE::UP);
                                                     vect_faces.push_back(FACE_INFO(_oioa0_offset_index, _oioa0_offset, _oioa0_altitude, _oioa1_offset_index, _oioa1_offset, _oioa1_altitude, cursor.do_reverse));
                                                   } else {
@@ -3953,9 +3987,7 @@ namespace CGAL {
                                                   }
 
                                                   for (auto& contour_point : vect_segment_points) {
-#ifdef _MMULTITHREAD
                                                     mtx_.lock();
-#endif
                                                     // Только что узнал, что std::map не является потокобезопасным не только на запись, но и на чтение.
                                                     // Поэтому все операции чтения/записи при многопоточной работе надо оборачивать mutex-ом.
                                                     // Пример сбоя без mutex: <image url="..\code_images\file_0084.png" scale=".2"/>
@@ -3963,23 +3995,17 @@ namespace CGAL {
                                                     // объекта в этот map из другого потока! А один раз даже возникла блокировка и blender повис. Хорошо ещё догадался войти отладчиком, а не сбросить
                                                     // blender. Самое обидное - очень редко вылезает. Много тестов прошло без проблем!
                                                     auto& calc_point = calc_points.map__point_index__calc_point[contour_point.point_index];
-#ifdef _MMULTITHREAD
                                                     mtx_.unlock();
-#endif
-                                                    if (contour_point.type == SHAPE_POINT::POINT_TYPE::POINT) {
+                                                    if (contour_point.type == SHAPE_POINT::POINT_TYPE::PROJECT_POINT) {
                                                       if (cursor.do_collect_points == true) {
                                                         // TODO: Надо подумать, как избежать такого артифакта при shade_smooth <image url="..\code_images\file_0083.png" scale=".5"/>. Это происходит из-за попадания 0-й точки в отрезок.
 
-                                                        // Определить индекс для точки типа POINT на основе перекрытия. Если такой точки нет, то создать её и вернуть её индекс.
-#ifdef _MMULTITHREAD
+                                                        // Определить индекс для точки типа PROJECT_POINT на основе перекрытия. Если такой точки нет, то создать её и вернуть её индекс.
                                                         mtx_.lock();
-#endif
-                                                        int application_counter = ++map__point_index__counter[calc_point.index]; // Используется свойство map, что если элемента в map ещё не было с этим ключём, то по умолчанию в int создаётся 0.
+                                                        int application_index = ++map__point_index__counter[calc_point.index]; // Используется свойство map, что если элемента в map ещё не было с этим ключём, то по умолчанию в int создаётся 0.
                                                         // Оставлю для истории, какая ошибка появилась в алгоритме с появлением profile_face_index: <image url="..\code_images\file_0085.png" scale=".1"/>
-                                                        int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_counter);
-#ifdef _MMULTITHREAD
+                                                        int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_index);
                                                         mtx_.unlock();
-#endif
                                                         vect_faces.back().face_verts_indexes.push_back(point_index);
                                                       }
                                                       continue;
@@ -4019,19 +4045,11 @@ namespace CGAL {
                                                     std::reverse(face_info.face_verts_indexes.begin(), face_info.face_verts_indexes.end());
                                                   }
                                                 }
-#ifdef _MMULTITHREAD
                                                 mtx_.lock();
-#endif
-                                                // Надо понаблюдать, т.к. до введения mutex в этом месте в mesh пропадал один сегмент.
-                                                map__ss_id__profile_face_index__mesh_face_id__faces_info[ss_id][profile_face_index][mesh_face_id] = vect_faces;
-#ifdef _MMULTITHREAD
+                                                map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id][mesh_face_id] = vect_faces;
                                                 mtx_.unlock();
-#endif
-
-#ifdef _MMULTITHREAD
                                                 }
                                               );
-#endif
                                             }
                                           }
                                         }
@@ -4060,9 +4078,9 @@ namespace CGAL {
                                 //				// вывод параметров точек текущего контура
                                 //				printf("\n  % 2.8lf, % 2.8lf, % 2.8lf, type: %s, alt: %s:% 2.8lf, offset_index: % 3d, offset: % 2.8lf; % 3u / % 4d",
                                 //					CGAL::to_double(calc_point.point.x()), CGAL::to_double(calc_point.point.y()), CGAL::to_double(calc_point.point.z()),
-                                //					contour_point.type == 0 ? "POINT" : contour_point.type == 1 ? "   UP" : " DOWN",
+                                //					contour_point.type == 0 ? "PROJECT_POINT" : contour_point.type == 1 ? "   UP" : " DOWN",
                                 //					calc_point.is_altitude_calc == true ? "    set" : "not set",
-                                //					CGAL::to_double(calc_point.oioa_altitude), calc_point.oioa_offset_index /*-1 если тип точки POINT, то offset-а у неё нет*/, CGAL::to_double(calc_point.oioa_offset), counter++, contour_point.point_index
+                                //					CGAL::to_double(calc_point.oioa_altitude), calc_point.oioa_offset_index /*-1 если тип точки PROJECT_POINT, то offset-а у неё нет*/, CGAL::to_double(calc_point.oioa_offset), counter++, contour_point.point_index
                                 //				);
 
                                 //				// Вывести список индексов результирующих точек
@@ -4075,11 +4093,11 @@ namespace CGAL {
                                 //					printf("]");
                                 //				}
                                 //			}
-                                //			// Вывести список индексов в которые была преобразована точка, если она типа POINT
+                                //			// Вывести список индексов в которые была преобразована точка, если она типа PROJECT_POINT
 
                                 //			// Вывод только тех точек, которые образуют faces:
                                 //			int face_id = 0;
-                                //			for (auto& face_info : map__ss_id__profile_face_index__mesh_face_id__faces_info[ss_id][mesh_face_id]) {
+                                //			for (auto& face_info : map__profile_face_index__ss_id__mesh_face_id__faces_info[ss_id][mesh_face_id]) {
                                 //				printf("\n      face_id % 3u offsets: (% 2d, % 2d : [% 2.8lf, % 2.8lf; % 2.8lf, % 2.8lf], reversed: %s); len: (% 3d): ", face_id, face_info.oioa0_offset_index, face_info.oioa1_offset_index, CGAL::to_double(face_info.oioa0_offset), CGAL::to_double(face_info.oioa0_altitude), CGAL::to_double(face_info.oioa1_offset), CGAL::to_double(face_info.oioa1_altitude), face_info.do_reverse == true ? "yes" : " no", (int)face_info.face_verts_indexes.size());
                                 //				for (auto& vert_index : face_info.face_verts_indexes) {
                                 //					printf(" % 3u", vert_index);
@@ -4099,8 +4117,8 @@ namespace CGAL {
                               timer1.start();
                               // Выполнить рассчёт точек, для которых ещё не определена высота/положение:
                               // update: рассчёт удалось выполнить за один проход благодаря параметру shape_point.event_time.
-                              for (auto& [ss_id, map__profile_face_index__mesh_face_id__faces_info] : map__ss_id__profile_face_index__mesh_face_id__faces_info) {
-                                for (auto& [profile_face_index, map__mesh_face_id__faces_info] : map__profile_face_index__mesh_face_id__faces_info) {
+                              for (auto& [profile_face_index, map__ss_id__mesh_face_id__faces_info] : map__profile_face_index__ss_id__mesh_face_id__faces_info) {
+                                for (auto& [ss_id, map__mesh_face_id__faces_info] : map__ss_id__mesh_face_id__faces_info) {
                                   for (auto& [mesh_face_id, vect__faces_info] : map__mesh_face_id__faces_info) {
                                     for (auto& face_info : vect__faces_info) {
                                       // Разбить все точки face на те, которые рассчитаны или заданы и те, которые не заданы
@@ -4132,51 +4150,84 @@ namespace CGAL {
                               std::vector<SM_Face_index> vect_faces_indexes;
                               map__object_index__mesh_ss_merged[object_index] = std::vector<Mesh>();
 
-                              if (results_join_mode != 0) {
-                                // Не применять этот метод при других join_mode.
-                                bevel_more_split = false;
-                              }
+                              //if (results_join_mode != 0) {
+                              //  // Не применять этот метод при других join_mode.
+                              //  bevel_more_split = false;
+                              //}
 
-                              std::map<int /*profile_face_index*/, Mesh> map__profile_face_index__mesh;
-                              for (auto& [ss_id, map__profile_face_index__mesh_face_id__faces_info] : map__ss_id__profile_face_index__mesh_face_id__faces_info) {
-                                for (auto& [profile_face_index, map__mesh_face_id__faces_info] : map__profile_face_index__mesh_face_id__faces_info) {
-                                  if (map__profile_face_index__mesh.find(profile_face_index)==map__profile_face_index__mesh.end()) {
-                                    map__profile_face_index__mesh[profile_face_index] = Mesh();
+                              std::vector<Mesh> vect_mesh;
+                              if (results_join_mode != 0) {
+                                // Для results_join_mode!='SPLIT' всё собирать только в один Mesh
+                                vect_mesh.push_back(Mesh());
+                              }
+                              std::map<std::tuple<int, int, int> /*point_index, ss_id, _application_index*/, Mesh::vertex_index> map__beveled_points_vertex_indexes;
+                              for (auto& [profile_face_index, map__ss_id__mesh_face_id__faces_info] : map__profile_face_index__ss_id__mesh_face_id__faces_info) {
+                                if(results_join_mode==0 && bevel_more_split == false /*Применять bevel_more_split только при results_join_mode==0*/) {
+                                  // Для results_join_mode=='SPLIT', но дробление только по profile_face_index, то на каждый profile_face_index создавать по Mesh.
+                                  vect_mesh.push_back(Mesh());
+                                  map__beveled_points_vertex_indexes.clear();
+                                }
+                                for (auto& [ss_id, map__mesh_face_id__faces_info] : map__ss_id__mesh_face_id__faces_info) {
+                                  if(results_join_mode==0 && bevel_more_split == true /*Применять bevel_more_split только при results_join_mode==0*/) {
+                                    // Для results_join_mode=='SPLIT', но дробление кроме как по profile_face_index, ещё и по ss_id то на каждый profile_face_index/ss_id создавать по Mesh.
+                                    vect_mesh.push_back(Mesh());
+                                    map__beveled_points_vertex_indexes.clear();
                                   }
+
                                   // Собрать mesh для Bevel SS:
-                                  Mesh beveled_mesh;
-                                  std::map<int, Mesh::vertex_index> beveled_points;
+                                  Mesh& beveled_mesh = vect_mesh.back();
                                   for (auto& [mesh_face_id, vect__faces_info] : map__mesh_face_id__faces_info) {
                                     // Работа с данными одной из face в профиле
 
                                     for (auto& face_info : vect__faces_info) {
-                                      std::vector<Mesh::vertex_index> vect_indexes;
+                                      std::vector<Mesh::vertex_index> vect_face_indexes;
                                       for (auto& point_index : face_info.face_verts_indexes) {
                                         SM_Vertex_index point_id;
-                                        auto& it_beveled_points = beveled_points.find(point_index);
-                                        if (it_beveled_points == beveled_points.end()) {
-                                          auto& shape_point = calc_points.map__point_index__calc_point[point_index];
+                                        int _point_index = point_index;
+                                        int _application_index = 0;
+                                        int _profile_face_index = profile_face_index;
+                                        auto& shape_point = calc_points.map__point_index__calc_point[point_index];
+                                        if (shape_point.point_type == SHAPE_POINT::POINT_TYPE::APPLICATED_PROJECT_POINT) {
+                                          // Такая точка может попасться несколько раз в зависимости от _application_index
+                                          if (results_join_mode==1 || results_join_mode==2) {
+                                            _point_index = shape_point.project_point_index;
+                                            _application_index = shape_point.application_index;
+                                          } else {
+                                            // _application_index остаётся как был, т.к. не меняется point_index, который в пределах своего ss_id однозначно указывает на любую точку (не только в точке UP/DOWN).
+                                            _point_index = point_index;
+                                            _application_index = shape_point.application_index;
+                                          }
+                                        } else {
+                                          // Для остальных типов точек (UP/DOWN), которые являются точками пересечения he и SS _application_index всегда=1, т.к. такая точка никогда не граничит с другим ss_id,
+                                          // т.к. "двигается" вдоль контура своего ss_id и поэтому встречается только один раз внутри ss_id и не на границе ss_id.
+                                          _point_index = point_index;
+                                          _application_index = 1;
+                                        }
+                                        auto& beveled_point_index = std::tuple(_point_index, _profile_face_index, _application_index);
+                                        auto& it_beveled_points = map__beveled_points_vertex_indexes.find(beveled_point_index);
+                                        if (it_beveled_points == map__beveled_points_vertex_indexes.end()) {
+#ifdef _DEBUG
                                           Point_3 p_test = Point_3(shape_point.point);
                                           double x = CGAL::to_double(p_test.x());
                                           double y = CGAL::to_double(p_test.y());
                                           double z = CGAL::to_double(p_test.z());
+#endif
                                           point_id = beveled_mesh.add_vertex(shape_point.point);
-                                          beveled_points[point_index] = point_id;
+                                          map__beveled_points_vertex_indexes[beveled_point_index] = point_id;
                                           auto point_id_idx = point_id.idx();
                                           shape_point.beveled_indexes.push_back(point_id_idx);
                                         } else {
-                                          //point_id = beveled_points[point_index];
                                           auto& [_point_index, _point_id] = *it_beveled_points;
                                           point_id = _point_id;
                                         }
-                                        vect_indexes.push_back(point_id);
+                                        vect_face_indexes.push_back(point_id);
                                       }
-                                      auto& face_id = beveled_mesh.add_face(vect_indexes);
+                                      auto& face_id = beveled_mesh.add_face(vect_face_indexes);
 
                                       if (face_id == Mesh::null_face()) {
                                         if (verbose == true) {
                                           printf("\n!!! " VAL2STR(Err::_0041) " Failed to add face with verts (ss_id: % 3u, mesh_face_id: % 3u): [", ss_id, mesh_face_id);
-                                          for (auto& vert_index : vect_indexes) {
+                                          for (auto& vert_index : vect_face_indexes) {
                                             printf(" % 3u", vert_index.idx());
                                           }
                                           printf("]");
@@ -4186,19 +4237,10 @@ namespace CGAL {
                                       }
                                     }
                                   }
-                                  if (bevel_more_split == true) {
-                                    map__object_index__mesh_ss_merged[object_index].push_back(beveled_mesh);
-                                  } else {
-                                    map__profile_face_index__mesh[profile_face_index].join(beveled_mesh);
-                                  }
                                 }
                               }
-                              if (bevel_more_split == true) {
-
-                              } else {
-                                for (auto& [profile_face_index, mesh] : map__profile_face_index__mesh) {
-                                  map__object_index__mesh_ss_merged[object_index].push_back(mesh);
-                                }
+                              for (auto& mesh : vect_mesh) {
+                                map__object_index__mesh_ss_merged[object_index].push_back(mesh);
                               }
                               timer1.stop();
                               if (verbose == true) {
@@ -4206,7 +4248,6 @@ namespace CGAL {
                               }
                             }
                           }
-                          //timer_bevel.stop();
                           if (verbose) {
                             printf("\n " VAL2STR(Err::_0033) ". SS 2D Offset. object_index %u, ss timer_bevel %.5g, %.5g", object_index, timer_bevel.time(), t1);
                           }
@@ -4238,6 +4279,7 @@ namespace CGAL {
                         split_object_index++;
                       }
                     } else if (results_join_mode == 1) {
+                      // results_join_mode уже учтён, поэтому в векторе должен находится один объект, поэтому merge делать не нужно
                       keep_object_index = object_index;
                       Mesh mesh_joined;
                       for (auto& mesh : vect__meshes) {
@@ -4248,6 +4290,7 @@ namespace CGAL {
                       offset_info.mesh_ss_02_merged = mesh_joined;
                       map_join_mesh[keep_object_index].push_back(offset_info);
                     } else if (results_join_mode == 2) {
+                      // results_join_mode уже учтён, поэтому в векторе должен находится один объект, поэтому merge делать не нужно
                       for (auto& mesh : vect__meshes) {
                         mesh_join_all_objects.join(mesh);
                       }
@@ -4269,61 +4312,6 @@ namespace CGAL {
                     offset_info.mesh_ss_02_merged = mesh_merged_all_objects;
                     map_join_mesh[merge_object_index].push_back(offset_info);
                   }
-                  //
-                  //// Примечание: все offset тут теряются
-                  //for (auto& [object_index, ss_id_OIOA_OFFSET_SS_PARAMS] : map__object_id__ss_id__OIOA_OFFSET_SS_PARAMS) {
-                  //  if (verbose) {
-                  //    printf("\n " VAL2STR(Err::_0043) ". SS 2D Offset. results_join_mode==% 2d start for object % 2d", results_join_mode, object_index);
-                  //  }
-                  //  if (results_join_mode == 0) {
-                  //    std::vector<Mesh> components;
-                  //    // Разделить текущий набор точек по ss_id. Напоминаю, что ss_id сквозные.
-                  //    for (auto& [ss_id, oioa_offset_ss_params] : ss_id_OIOA_OFFSET_SS_PARAMS) {
-                  //      if (map_join_mesh.find(split_object_index) == map_join_mesh.end()) {
-                  //        map_join_mesh[split_object_index] = std::vector<OIOA_OFFSET_SS_PARAMS>();
-                  //      }
-                  //      OIOA_OFFSET_SS_PARAMS offset_info(OIOA(merge_object_index, 0, 0.0, 0.0), std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
-                  //      offset_info.mesh_ss_02_merged = oioa_offset_ss_params[0].mesh_ss_01_source;
-                  //      map_join_mesh[split_object_index].push_back(offset_info);
-                  //      split_object_index++;
-                  //    }
-                  //  } else if (results_join_mode == 1) {
-                  //    for (auto& [ss_id, oioa_offset_ss_params] : ss_id_OIOA_OFFSET_SS_PARAMS) {
-                  //      keep_object_index = object_index;
-                  //      if (map_join_mesh.find(keep_object_index) == map_join_mesh.end()) {
-                  //        map_join_mesh[keep_object_index] = std::vector<OIOA_OFFSET_SS_PARAMS>();
-                  //        // Запомнить только общий merged mesh в самом первом параметре oioa (выход с помощью break).
-                  //        OIOA_OFFSET_SS_PARAMS offset_info(OIOA(merge_object_index, 0, 0.0, 0.0), std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
-                  //        offset_info.mesh_ss_02_merged = map__object_index__mesh_ss_merged[object_index];
-                  //        map_join_mesh[keep_object_index].push_back(offset_info);
-                  //        break;
-                  //      }
-                  //      // Напоминание: offset пока не учитывается, поэтому только в первом элементе хранятся полигоны SS.
-                  //    }
-                  //  } else if (results_join_mode == 2) { // 2 - для всех остальных случаев
-                  //    // Этот метод работает немного иначе, чем в режиме Straight Skeleton: объединение Mesh происходит сразу здесь,
-                  //    // чтобы потом не пересчитывать индексы.
-                  //    // Объеденить все результаты в один объект
-                  //    for (auto& [ss_id, oioa_offset_ss_params] : ss_id_OIOA_OFFSET_SS_PARAMS) {
-                  //      if (map_join_mesh.find(merge_object_index) == map_join_mesh.end()) {
-                  //        map_join_mesh[merge_object_index] = std::vector<OIOA_OFFSET_SS_PARAMS>();
-                  //      }
-                  //      // TODO: Нужно сделать Merge по вершинам. Сейчас его нет.
-                  //      mesh_merged_all_objects.join(oioa_offset_ss_params[0].mesh_ss_01_source);
-                  //      // Напоминание: offset пока не учитывается.
-                  //      //map_join_mesh[merge_object_index].push_back(vect__oioa__offset_ss_params[0]);
-                  //    }
-                  //  }
-                  //  if (verbose) {
-                  //    printf("\n " VAL2STR(Err::_0043) ". SS 2D Offset. results_join_mode==% 2d finished for object % 2d", results_join_mode, object_index);
-                  //  }
-                  //}
-                  //if (results_join_mode == 2) {
-                  //  OIOA_OFFSET_SS_PARAMS offset_info(OIOA(merge_object_index, 0, 0.0, 0.0), std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
-                  //  offset_info.mesh_ss_02_merged = mesh_merged_all_objects;
-                  //  map_join_mesh[merge_object_index].push_back(offset_info);
-                  //}
-
                 } // else if (result_type == ResType::STRAIGHT_SKELETON)
               } // Конец рассчёта map_join_mesh. В настоящий момент известен количественный состав результата.
 
@@ -4496,9 +4484,6 @@ namespace CGAL {
                     for (int IJ = 0; IJ <= vect_objects_faces_I.size() - 1; IJ++) {
                       mesh_data->faces[face_idx] = vect_objects_faces_I[IJ];
                       face_idx++;
-                      //mesh_data->faces[I * 3 + 0] = vect_objects_faces[I][0];
-                      //mesh_data->faces[I * 3 + 1] = vect_objects_faces[I][1];
-                      //mesh_data->faces[I * 3 + 2] = vect_objects_faces[I][2];
                     }
                   }
                 }
