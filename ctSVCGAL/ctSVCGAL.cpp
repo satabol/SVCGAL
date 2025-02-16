@@ -4526,13 +4526,15 @@ namespace CGAL {
                 }
 
                 // записать результаты vertices, edges и faces
-                if (vect_objects_verts.size() == 0) {
-                  mesh_data->nn_offsets_indexes = NULL;
-                  mesh_data->vertices = NULL;
-                  mesh_data->edges = NULL;
-                  mesh_data->faces = NULL;
-                  mesh_data->nn_faces_indexes_counters = NULL;
-                } else {
+                // Временно отключу, т.к. вернуть надо столько объектов, сколько и поступило.
+                //if (vect_objects_verts.size() == 0) {
+                //  mesh_data->nn_offsets_indexes = NULL;
+                //  mesh_data->vertices = NULL;
+                //  mesh_data->edges = NULL;
+                //  mesh_data->faces = NULL;
+                //  mesh_data->nn_faces_indexes_counters = NULL;
+                //} else 
+                {
                   mesh_data->nn_offsets_indexes = NULL;
                   mesh_data->vertices = NULL;
                   mesh_data->edges = NULL;
