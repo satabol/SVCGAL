@@ -57,9 +57,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.POINTER((ctypes.c_float) ),  # in_offsets 
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_altitudes (chained)
         ctypes.POINTER((ctypes.c_float) ),  # in_altitudes (chained)
-        ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_offset_faces
-        ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_indexes_in_offset_faces
-        ctypes.POINTER((ctypes.c_int  ) ),  # in_offset_faces_indexes - (array)
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__counters
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__indexes_counters
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__close_mode
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__indexes_array - (array)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_planes (chained)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_contours_in_planes (chained)
 
@@ -69,7 +70,6 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.c_int,                       # result type: 0 - contours, 1 - Mesh
         ctypes.c_bool,                      # force_z_zero
         ctypes.c_int,                       # source_objects_join_mode 0 - split, 1 - keep, 2 - merge all meshes
-        ctypes.c_int,                       # profile_close_mode 0-open, 1-close
         ctypes.c_int,                       # results_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
         ctypes.c_bool,                      # use_cache_of_straight_skeleton
@@ -86,7 +86,6 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     res_type                       = data['res_type']
     only_tests_for_valid           = data['only_tests_for_valid']
     source_objects_join_mode       = data['source_objects_join_mode']
-    profile_close_mode             = data['profile_close_mode']
     results_join_mode              = data['results_join_mode']
     verbose                        = data['verbose']
     use_cache_of_straight_skeleton = data['use_cache_of_straight_skeleton']
@@ -95,9 +94,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     offsets_counters                = []
     offsets_array                   = []
     altitudes_array                 = []
-    offset_faces_counters           = [] # Счётчик количества faces на один объект (количество этого параметра равно количеству объектов)
-    offset_faces_indexes_counters   = [] # Счётчик количества индексов у каждого face
-    offset_faces_indexes_array      = [] # Индексы каждого face
+    profile_faces__counters         = [] # Счётчик количества faces на один объект (количество этого параметра равно количеству объектов)
+    profile_faces__indexes_counters = [] # Счётчик количества индексов у каждого face
+    profile_faces__indexes_array    = [] # Индексы каждого face
+    profile_faces__close_modes_array = [] # режим открытия/закрытия каждого профильного face (0-закрыто, 1-открыто)
     planes_in_object                = [] # Сколько в Объекте planes [1-элемент на объект]
     contours_in_planes_counter      = [] # Сколько в каждом плане контуров
     vertices_in_contour_counters    = []
@@ -107,16 +107,16 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     for I, object1 in enumerate(data['objects']):
         offsets_counters.append(len(object1['offsets']))
         offsets_array   .extend(object1['offsets'])
-        altitudes_array.extend(object1['altitudes'])
+        altitudes_array .extend(object1['altitudes'])
 
         # Собрать данные по faces, из которых состоит профиль для SS
-        offset_faces_counters.append(len(object1['offset_faces']))
-        for face1 in object1['offset_faces']:
-            offset_faces_indexes_counters.append(len(face1))
-            offset_faces_indexes_array.extend(face1)
+        profile_faces__counters.append(len(object1['profile_faces__indexes']))
+        for face1 in object1['profile_faces__indexes']:
+            profile_faces__indexes_counters.append(len(face1))
+            profile_faces__indexes_array.extend(face1)
             pass
-        #offset_edges_counters.append( len(object1['offset_edges']) )
-        #offset_edges_array.extend(object1['offset_edges'])
+        profile_faces__close_modes = object1['profile_faces__close_modes']
+        profile_faces__close_modes_array.extend(profile_faces__close_modes)
         planes_in_object.append(len(object1['planes'])) # количество планов текущего объекта
         for plane1 in object1['planes']:
             contours_in_planes_counter.append(len(plane1)) # Количество контуров по каждому плану
@@ -129,24 +129,24 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     pass
 
     params = [
-        len(data['objects']),           #in_count_of_objects
-        shapes_mode,                    # 0-ORIGINAL_BOUNDARIES, 1-EXCLUDE_HOLES, 2-INVERT_HOLES
-        offsets_counters,               # in_count_of_offsets - array (len is count of objects)
+        len(data['objects']),            #in_count_of_objects
+        shapes_mode,                     # 0-ORIGINAL_BOUNDARIES, 1-EXCLUDE_HOLES, 2-INVERT_HOLES
+        offsets_counters,                # in_count_of_offsets - array (len is count of objects)
         offsets_array,
-        offsets_counters,               # in_count_of_altitudes - array (len is count of objects)
-        altitudes_array,                # in_altitudes
-        offset_faces_counters,          # 
-        offset_faces_indexes_counters,  # in_offset_edges
-        offset_faces_indexes_array,     #
-        planes_in_object,               # in_count_of_planes
-        contours_in_planes_counter,     # in_contours_in_planes
-        vertices_in_contour_counters,   # in_vertices_in_contours
-        vertices_list,                  # in_vertices
+        offsets_counters,                # in_count_of_altitudes - array (len is count of objects)
+        altitudes_array,                 # in_altitudes
+        profile_faces__counters,         # 
+        profile_faces__indexes_counters, # in_offset_edges
+        profile_faces__indexes_array,    #
+        profile_faces__close_modes_array, #
+        planes_in_object,                # in_count_of_planes
+        contours_in_planes_counter,      # in_contours_in_planes
+        vertices_in_contour_counters,    # in_vertices_in_contours
+        vertices_list,                   # in_vertices
         only_tests_for_valid,
         res_type,
         force_z_zero,
         source_objects_join_mode,
-        profile_close_mode,
         results_join_mode,
         verbose
     ]
@@ -159,9 +159,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     ctypes_in_count_of_altitudes    = ctypes.ARRAY( len(offsets_counters)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offsets_counters ])
     ctypes_in_altitudes             = ctypes.ARRAY( len(altitudes_array)             ,  ctypes.c_float   )(*[(ctypes.c_float  )( a1) for a1 in altitudes_array  ])
     
-    ctypes_in_offset_faces_counters         = ctypes.ARRAY( len(offset_faces_counters)          ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offset_faces_counters ])
-    ctypes_in_offset_faces_indexes_counters = ctypes.ARRAY( len(offset_faces_indexes_counters)  ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offset_faces_indexes_counters ])
-    ctypes_in_offset_faces_indexes_array    = ctypes.ARRAY( len(offset_faces_indexes_array)     ,  ctypes.c_int     )(*[(ctypes.c_int    )( f1) for f1 in offset_faces_indexes_array ])
+    ctypes_in__profile_faces__counters              = ctypes.ARRAY( len(profile_faces__counters)         ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__counters ])
+    ctypes_in__profile_faces__indexes_counters      = ctypes.ARRAY( len(profile_faces__indexes_counters) ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__indexes_counters ])
+    ctypes_in__profile_faces__indexes_array         = ctypes.ARRAY( len(profile_faces__indexes_array)    ,  ctypes.c_int     )(*[(ctypes.c_int    )( f1) for f1 in profile_faces__indexes_array ])
+    ctypes_in__profile_faces__close_modes_array     = ctypes.ARRAY( len(profile_faces__close_modes_array),  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__close_modes_array ])
     
     #ctypes_in_count_of_offset_edges = ctypes.ARRAY( len(offset_edges_counters)       ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offset_edges_counters ])
     #ctypes_in_offset_edges          = ctypes.ARRAY( len(offset_edges_array)          ,  ctypes.c_int*2   )(*[(ctypes.c_int*2  )(*e1) for e1 in offset_edges_array  ])
@@ -192,9 +193,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             ctypes_in_offsets,
             ctypes_in_count_of_altitudes,
             ctypes_in_altitudes,
-            ctypes_in_offset_faces_counters,
-            ctypes_in_offset_faces_indexes_counters,
-            ctypes_in_offset_faces_indexes_array,
+            ctypes_in__profile_faces__counters,
+            ctypes_in__profile_faces__indexes_counters,
+            ctypes_in__profile_faces__indexes_array,
+            ctypes_in__profile_faces__close_modes_array,
             #ctypes_in_count_of_offset_edges,
             #ctypes_in_offset_edges,
             ctypes_in_count_of_planes,
@@ -205,7 +207,6 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             res_type,
             force_z_zero,
             source_objects_join_mode,
-            profile_close_mode,
             results_join_mode,
             verbose,
             use_cache_of_straight_skeleton,
