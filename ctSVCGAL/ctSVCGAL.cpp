@@ -2182,7 +2182,6 @@ namespace CGAL {
                 {
                   CGAL::Real_timer timer1; // Общее время рассчёта всех SS (вместе с загрузкой данных в SS)
                   timer1.start();
-                  double summ_timer2 = 0;
                   boost::asio::thread_pool pool3(threadNumbers);
                   int threads_counts = 0;
                   size_t ss_id_counter = 0;
@@ -2190,7 +2189,7 @@ namespace CGAL {
                   auto vect_polygon1_oioa_rest = vect_polygon1_oioa_size;
                   for (auto& polygon1_oioa : vect_polygon1_oioa) {
                     ss_id_counter++;
-                    boost::asio::post(pool3, [ss_id_counter, &polygon1_oioa, &res_errors, &res_contours, threads_counts, verbose, &summ_timer2, vect_polygon1_oioa_size, &vect_polygon1_oioa_rest, use_cache_of_straight_skeleton, &mtx_] {
+                    boost::asio::post(pool3, [ss_id_counter, &polygon1_oioa, &res_errors, &res_contours, threads_counts, verbose, vect_polygon1_oioa_size, &vect_polygon1_oioa_rest, use_cache_of_straight_skeleton, &mtx_] {
                       unsigned int crc_val = 0;
                       bool is_crc_calculated = false;
                       SsBuilder ssb;
@@ -2223,7 +2222,7 @@ namespace CGAL {
                           std::vector<FT> vect__points;
                           for (auto& point : polygon1_oioa.polygon1_with_holes->outer_boundary()) {
                             FT X = point.x();
-                            FT Y = point.x();
+                            FT Y = point.y();
                             vect__points.push_back(X);
                             vect__points.push_back(Y);
                           }
@@ -2258,16 +2257,18 @@ namespace CGAL {
                           crc.process_bytes(&byte_buffer[0], length);
                           crc_val = crc.checksum();
                           is_crc_calculated = true;
-                          if (verbose == true) {
-                            mtx_.lock();
-                            printf("\n " VAL2STR(Msg::_0055) ". ss_id=%2zu; crc=%2u", ss_id_counter, crc_val);
-                            mtx_.unlock();
-                          }
+                          //if (verbose == true) {
+                          //  mtx_.lock();
+                          //  printf("\n " VAL2STR(Msg::_0055) ". ss_id=%2zu; crc=%2u", ss_id_counter, crc_val);
+                          //  mtx_.unlock();
+                          //}
                         }
                       }
                       // Рассчитать SS
                       CGAL::Real_timer timer2;
                       timer2.start();
+                      bool is_ss_cached = false;
+                      bool is_ss_used_as_chached = false;
                       try {
                         // Если рассчёт не требует кэша или в кэше ничего нет, то выполнить рассчёт SS в любом случае.
                         if (use_cache_of_straight_skeleton==false || 
@@ -2281,11 +2282,13 @@ namespace CGAL {
                           //}
                         } else {
                           polygon1_oioa.ss = map__crc__ss[crc_val];
-                          if (verbose == true) {
-                            mtx_.lock();
-                            printf("\n " VAL2STR(Msg::_0056) ". ss_id=%2zu; used as cached with crc=%2u", ss_id_counter, crc_val);
-                            mtx_.unlock();
-                          }
+                          is_ss_cached = true;
+                          is_ss_used_as_chached = true;
+                          //if (verbose == true) {
+                          //  mtx_.lock();
+                          //  printf("\n " VAL2STR(Msg::_0056) ". ss_id=%2zu; used as cached with crc=%2u", ss_id_counter, crc_val);
+                          //  mtx_.unlock();
+                          //}
                         }
                       } catch (std::exception _ex) {
                         // При ошибке исходный SS останется null
@@ -2294,9 +2297,8 @@ namespace CGAL {
                       timer2.stop();
                       if (verbose == true) {
                         mtx_.lock();
-                        summ_timer2 += timer2.time();
                         vect_polygon1_oioa_rest--;
-                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f", threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time());
+                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Calc SS. || ss_id: %2zu Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f, cached: %s, used from cache: %s, crc: %10u", ss_id_counter, threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time(), is_ss_cached==true ? "YES" : " NO", is_ss_used_as_chached==true ? "YES" : " NO", crc_val);
                         mtx_.unlock();
                       }
                       // Proceed only if the skeleton was correctly constructed.
@@ -2323,7 +2325,7 @@ namespace CGAL {
                   pool3.join();
                   timer1.stop();
                   if (verbose == true) {
-                    printf("\n " VAL2STR(Msg::_0045) ". SS 2D Offset. Count of SS: %d, build time: % 10.5f, only SS: % 10.5f", threads_counts, timer1.time(), summ_timer2);
+                    printf("\n " VAL2STR(Msg::_0045) ". SS 2D Offset. Count of SS: %d,                                                          build time: % 12.5f", threads_counts, timer1.time() );
                   }
                 }
 
@@ -2351,7 +2353,14 @@ namespace CGAL {
                           timer2.stop();
                           if (verbose == true) {
                             mtx_.lock();
-                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset ss_id: % 4zd, % 3d, % 10.5f, build time: % 10.5f. (multithread) ||", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time());
+                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 3d, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
+                            if (offset_contours.size() > 0) {
+                              printf("[");
+                              for (auto& c1 : offset_contours) {
+                                printf(" %6zu", c1->vertices().size() );
+                              }
+                              printf(" ]");
+                            }
                             mtx_.unlock();
                           }
 
@@ -2439,7 +2448,7 @@ namespace CGAL {
                   pool4.join();
                   timer1.stop();
                   if (verbose == true) {
-                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                             calc of offsets general time: % 10.5f", timer1.time());
+                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                                 calc of offsets general time: % 10.5f", timer1.time());
                   }
                 }
 
@@ -3944,7 +3953,7 @@ namespace CGAL {
                                     }
                                   }
 
-                                  // Если данные по faces не были переданы, то соеденить контур по порядку переданных вершин (без замыкания):
+                                  // Если данные по faces не были переданы (через сокет profile faces <image url="..\code_images\file_0090.png" scale=".3"/>), то соеденить контур по порядку переданных вершин (без замыкания):
                                   if (vect__faces__edges.size() == 0) {
                                     std::vector<EDGE_INFO> vect__edges;
                                     for (int I = (int)vect_object_offsets.size() - 2; I >= 0; I--) {
@@ -3964,7 +3973,7 @@ namespace CGAL {
                                   boost::mutex mtx_;
 
                                   for (const auto& elem : map__ss_id__mesh_face_id__segment_contour) {
-                                    // Без этого преобразования возникают проблемы с передачей параметров в многопоточность.
+                                    // Без этого преобразования возникают проблемы с передачей параметров в многопоточность в clang.
                                     auto& ss_id = elem.first;
                                     auto& map__mesh_face_id__segment_points = elem.second;
                                     auto& _object_index = object_index;
@@ -3986,9 +3995,6 @@ namespace CGAL {
                                         {
                                           {
                                             for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
-                                              // Для увеличения производительности, чтобы позже не делать merge полученных mesh на одном объекте, в случае если пользователь и так выбрал режимы,
-                                              // при которых результирующий mesh пока ещё состоит из частей, разделённых на ss_id и profile_face_index и которые в некоторых режимах (1/2) потребуется
-                                              // объеденить, то это можно сделать прямо сейчас:
                                               int profile_face_index = I;
                                               auto& vect__edges = vect__faces__edges[I];
                                               if (vect__edges.size() >= 2) {
@@ -4189,7 +4195,7 @@ namespace CGAL {
                                         }
                                         timer1.stop();
                                         if (verbose == true) {
-                                          printf("\n " VAL2STR(Msg::_0052) ". SS 2D Offset. calc faces of segments. object_index: % 3d, ss_id=% 3d, calc time: % 10.5f. (multithread) ||", _object_index, ss_id, timer1.time());
+                                          printf("\n " VAL2STR(Msg::_0052) ". SS 2D Offset. calc faces of segments. || object_index: % 3d, ss_id=% 3d, calc time: % 10.5f.", _object_index, ss_id, timer1.time());
                                         }
                                       }
                                     );
@@ -4198,7 +4204,7 @@ namespace CGAL {
                                 }
                                 timer1.stop();
                                 if (verbose == true) {
-                                           printf("\n " VAL2STR(Msg::_0053) ". SS 2D Offset. calc faces of segments. ========================== general time: % 10.5f", timer1.time() );
+                                           printf("\n " VAL2STR(Msg::_0053) ". SS 2D Offset. calc faces of segments.                               general time: % 10.5f", timer1.time() );
                                 }
 #ifdef _DEBUG
                                 //if (verbose) {
