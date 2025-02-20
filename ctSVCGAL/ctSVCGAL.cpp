@@ -6,6 +6,7 @@
 # SPDX-License-Identifier: GPL3
 # License-Filename: LICENSE
 # Author of this file is satabol@yandex.ru. You can find me on the Telegram messenger channel https://t.me/sverchok_3d as 'Satabol'
+# Documentation: https://nortikin.github.io/sverchok/docs/nodes/CAD/straight_skeleton_2d_offset.html
 # This code has many images inline. To see them in the Visual Studio 2022 IDE use Visual Studio Addon "ImageComments2022": https://marketplace.visualstudio.com/items?itemName=ImageComments2022.ImageComments2022
 */
 
@@ -980,6 +981,15 @@ namespace CGAL {
           std::shared_ptr<Ss> ss{ nullptr };
 
           /// <summary>
+          /// crc - контрольная сумма координат исходных данных для построения skeleton.
+          /// </summary>
+          unsigned int crc__ss;
+          /// <summary>
+          /// Вычислена ли контрольная сумма
+          /// </summary>
+          bool is__crc__ss__calculated;
+
+          /// <summary>
           /// результирующая mesh от вектора точек vect_points с дополнительными атрибутами для расчётов bevel и Extrude.
           /// </summary>
           Mesh mesh_ss_01_source;
@@ -997,7 +1007,7 @@ namespace CGAL {
 
 
           POMS(int _object_index, std::shared_ptr<Polygon_with_holes_2> _polygon1_with_holes, std::vector<OIOA> _vect_oioa, SS_TYPE _ss_type)
-            :polygon1_with_holes(_polygon1_with_holes), vect_oioa(_vect_oioa), ss_type(_ss_type) {
+            :polygon1_with_holes(_polygon1_with_holes), vect_oioa(_vect_oioa), ss_type(_ss_type), crc__ss(0), is__crc__ss__calculated(false) {
             object_index = _object_index;
           }
         };
@@ -1247,7 +1257,7 @@ namespace CGAL {
         /// <summary>
         /// Кэширование SS на основе crc координат, по которым строится SS. <image url="..\code_images\file_0081.png" scale=".3"/>
         /// </summary>
-        std::map<unsigned int /*crc*/, std::shared_ptr<Ss>> map__crc__ss;
+        std::map<unsigned int /*crc - контрольная сумма координат исходных данных для построения skeleton*/, std::shared_ptr<Ss> /*ссылка на skeleton по crc*/> map__crc__ss;
 
         /// <summary>
         /// CGAL Bidirection offsets of Polygon_2 with holes. Многопоточность сначала считает в параллель Straight Skeleton, затем offsets.
@@ -2191,7 +2201,6 @@ namespace CGAL {
                     ss_id_counter++;
                     boost::asio::post(pool3, [ss_id_counter, &polygon1_oioa, &res_errors, &res_contours, threads_counts, verbose, vect_polygon1_oioa_size, &vect_polygon1_oioa_rest, use_cache_of_straight_skeleton, &mtx_] {
                       unsigned int crc_val = 0;
-                      bool is_crc_calculated = false;
                       SsBuilder ssb;
                       int verts_count = polygon1_oioa.polygon1_with_holes->outer_boundary().size();
                       {
@@ -2255,19 +2264,14 @@ namespace CGAL {
                           // Создаем объект для вычисления CRC-32
                           boost::crc_32_type crc;
                           crc.process_bytes(&byte_buffer[0], length);
-                          crc_val = crc.checksum();
-                          is_crc_calculated = true;
-                          //if (verbose == true) {
-                          //  mtx_.lock();
-                          //  printf("\n " VAL2STR(Msg::_0055) ". ss_id=%2zu; crc=%2u", ss_id_counter, crc_val);
-                          //  mtx_.unlock();
-                          //}
+                          polygon1_oioa.crc__ss = crc.checksum();
+                          polygon1_oioa.is__crc__ss__calculated = true;
                         }
                       }
                       // Рассчитать SS
                       CGAL::Real_timer timer2;
                       timer2.start();
-                      bool is_ss_cached = false;
+                      //bool is_ss_cached = false;
                       bool is_ss_used_as_chached = false;
                       try {
                         // Если рассчёт не требует кэша или в кэше ничего нет, то выполнить рассчёт SS в любом случае.
@@ -2279,16 +2283,12 @@ namespace CGAL {
                           // Update: решил пока перезаписывать кэш в любом случае.
                           //if (use_cache_of_straight_skeleton == true) {
                             map__crc__ss[crc_val] = polygon1_oioa.ss;
+                            polygon1_oioa.is__crc__ss__calculated = true;
                           //}
                         } else {
                           polygon1_oioa.ss = map__crc__ss[crc_val];
-                          is_ss_cached = true;
+                          polygon1_oioa.is__crc__ss__calculated = false;
                           is_ss_used_as_chached = true;
-                          //if (verbose == true) {
-                          //  mtx_.lock();
-                          //  printf("\n " VAL2STR(Msg::_0056) ". ss_id=%2zu; used as cached with crc=%2u", ss_id_counter, crc_val);
-                          //  mtx_.unlock();
-                          //}
                         }
                       } catch (std::exception _ex) {
                         // При ошибке исходный SS останется null
@@ -2298,7 +2298,7 @@ namespace CGAL {
                       if (verbose == true) {
                         mtx_.lock();
                         vect_polygon1_oioa_rest--;
-                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Calc SS. || ss_id: %2zu Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f, cached: %s, used from cache: %s, crc: %10u", ss_id_counter, threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time(), is_ss_cached==true ? "YES" : " NO", is_ss_used_as_chached==true ? "YES" : " NO", crc_val);
+                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Calc SS. || ss_id: %2zu Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f, cached: %s, used from cache: %s, crc: %10u", ss_id_counter, threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time(), polygon1_oioa.is__crc__ss__calculated==true ? "YES" : " NO", is_ss_used_as_chached==true ? "YES" : " NO", crc_val);
                         mtx_.unlock();
                       }
                       // Proceed only if the skeleton was correctly constructed.
@@ -2331,6 +2331,9 @@ namespace CGAL {
 
                 {
                   CGAL::Real_timer timer1; // Общее время рассчёта всех offset
+                  // На время рассчёта кэшировать offsets, т.к.может быть случай, например, кривой гибльберта, где много одинаковых offsets по квадрату, а считать надо только
+                  // по одной стороне, хотя общее количество увеличивается квадратично:// <image url="..\code_images\file_0091.png" scale=".4"/>
+                  //std::map<unsigned int /*crc - контрольная сумма координат исходных данных для построения skeleton*/, std::map<FT, ContourSequence>> map__crc__ss__FT__contour;
                   timer1.start();
                   // Рассчитать offset-ы в многопоточном режиме для всех SS
                   boost::asio::thread_pool pool4(threadNumbers);
@@ -2353,7 +2356,7 @@ namespace CGAL {
                           timer2.stop();
                           if (verbose == true) {
                             mtx_.lock();
-                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 3d, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
+                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 5d, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
                             if (offset_contours.size() > 0) {
                               printf("[");
                               for (auto& c1 : offset_contours) {
@@ -3922,7 +3925,16 @@ namespace CGAL {
                                           }
                                           // Простая проверка на допустимый диапазон:
                                           if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
-                                            vect__edges.push_back(EDGE_INFO(vect_object_offsets[start_index].offset_index, vect_object_offsets[start_index].offset, vect_object_offsets[start_index].altitude, false, vect_object_offsets[end_index].offset_index, vect_object_offsets[end_index].offset, vect_object_offsets[end_index].altitude, false));
+                                            vect__edges.push_back(
+                                              EDGE_INFO(
+                                                vect_object_offsets[start_index].offset_index,
+                                                vect_object_offsets[start_index].offset,
+                                                vect_object_offsets[start_index].altitude,
+                                                false,
+                                                vect_object_offsets[end_index].offset_index,
+                                                vect_object_offsets[end_index].offset,
+                                                vect_object_offsets[end_index].altitude,
+                                                false));
                                           }
                                         }
                                       }else if (face_open_mode == 1 /*CLOSED*/ || face_open_mode == 0 /*OPENED*/) {
@@ -3934,8 +3946,14 @@ namespace CGAL {
                                             // Если Индексы выходят за допустимый диапазон, то не делать соединения краёв в любом случае (TODO: по хорошему надо информировать пользователя ошибкой)
                                           } else {
                                             vect__edges.push_back(EDGE_INFO(
-                                              vect_object_offsets[face[last_index]].offset_index, vect_object_offsets[face[last_index]].offset, vect_object_offsets[face[last_index]].altitude, false,
-                                              vect_object_offsets[face[first_index]].offset_index, vect_object_offsets[face[first_index]].offset, vect_object_offsets[face[first_index]].altitude, false)
+                                              vect_object_offsets[face[last_index]].offset_index,
+                                              vect_object_offsets[face[last_index]].offset,
+                                              vect_object_offsets[face[last_index]].altitude,
+                                              false,
+                                              vect_object_offsets[face[first_index]].offset_index,
+                                              vect_object_offsets[face[first_index]].offset,
+                                              vect_object_offsets[face[first_index]].altitude,
+                                              false)
                                             );
                                           }
                                         }
@@ -3945,7 +3963,17 @@ namespace CGAL {
                                           auto& end_index = face[I];
                                           // Проверять, что такие offset-ы есть. Если одного из offset-ов нет, то пропускать такое ребро (edge):
                                           if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
-                                            vect__edges.push_back(EDGE_INFO(vect_object_offsets[start_index].offset_index, vect_object_offsets[start_index].offset, vect_object_offsets[start_index].altitude, false, vect_object_offsets[end_index].offset_index, vect_object_offsets[end_index].offset, vect_object_offsets[end_index].altitude, false));
+                                            vect__edges.push_back(
+                                              EDGE_INFO(
+                                                vect_object_offsets[start_index].offset_index,
+                                                vect_object_offsets[start_index].offset,
+                                                vect_object_offsets[start_index].altitude,
+                                                false,
+                                                vect_object_offsets[end_index].offset_index,
+                                                vect_object_offsets[end_index].offset,
+                                                vect_object_offsets[end_index].altitude,
+                                                false)
+                                            );
                                           }
                                         }
                                       }
@@ -3959,10 +3987,18 @@ namespace CGAL {
                                     for (int I = (int)vect_object_offsets.size() - 2; I >= 0; I--) {
                                       int firts_index = I;
                                       int last_index = I + 1;
-                                      vect__edges.push_back(EDGE_INFO(
-                                        vect_object_offsets[last_index].offset_index, vect_object_offsets[last_index].offset, vect_object_offsets[last_index].altitude, false,
-                                        vect_object_offsets[firts_index].offset_index, vect_object_offsets[firts_index].offset, vect_object_offsets[firts_index].altitude, false
-                                      ));
+                                      vect__edges.push_back(
+                                        EDGE_INFO(
+                                          vect_object_offsets[last_index].offset_index,
+                                          vect_object_offsets[last_index].offset,
+                                          vect_object_offsets[last_index].altitude,
+                                          false,
+                                          vect_object_offsets[firts_index].offset_index,
+                                          vect_object_offsets[firts_index].offset,
+                                          vect_object_offsets[firts_index].altitude,
+                                          false
+                                        )
+                                      );
                                     }
                                     vect__faces__edges.push_back(vect__edges);
                                   }
@@ -4269,10 +4305,21 @@ namespace CGAL {
                                         if (shape_point.is_altitude_calc == false) {
                                           // Формула рассчёта высоты проектных точек, по данным из волнового фронта (shape_point.event_time)
                                           FT z_time = (face_info.oioa1_altitude - face_info.oioa0_altitude) * (shape_point.event_time - face_info.oioa0_offset) / (face_info.oioa1_offset - face_info.oioa0_offset) + face_info.oioa0_altitude;
+#ifdef _DEBUG
+                                          double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
+                                          double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
+                                          double z_time_d = CGAL::to_double(z_time);
+#endif
                                           calc_points.map__point_index__calc_point[shape_point.index].is_altitude_calc = true;
                                           calc_points.map__point_index__calc_point[shape_point.index].point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
                                           calc_points.map__point_index__calc_point[shape_point.index].oioa_altitude = z_time;
                                         }
+#ifdef _DEBUG
+                                        double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
+                                        double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
+                                        double oioa_altitude = CGAL::to_double(calc_points.map__point_index__calc_point[shape_point.index].oioa_altitude);
+                                        int x = 0;
+#endif
                                       }
                                     }
                                   }
