@@ -2385,14 +2385,13 @@ namespace CGAL {
                   }
                 }
 
-                // Многопоточный рассчёт offset
                 {
+                  // Многопоточный рассчёт offset
                   CGAL::Real_timer timer1; // Общее время рассчёта всех offset
                   timer1.start();
                   for (POMS& polygon1_oioa : vect_polygon1_oioa) {
                     if (polygon1_oioa.ss) {
                       for (auto& [_offset, oioa1] : polygon1_oioa.map__offset__oioa) {
-                        // Загрузить получившиеся данные в массив с результатами:
                         if (res_contours.find(oioa1.object_index) == res_contours.end()) {
                           res_contours[oioa1.object_index] = std::map<FT /*offset*/, std::vector<OIOA>>();
                         }
@@ -2407,7 +2406,6 @@ namespace CGAL {
                   for (POMS& polygon1_oioa : vect_polygon1_oioa) {
                     if (polygon1_oioa.ss) {
                       for (auto& [_offset, _oioa1] : polygon1_oioa.map__offset__oioa) {
-                        //oioa1.ss = polygon1_oioa.ss; // Сохранить привязку offset и SS.
                         auto& oioa1 = _oioa1;
                         auto& vect_oioa = res_contours[oioa1.object_index][oioa1.offset];
 #ifdef _DEBUG
@@ -2416,7 +2414,7 @@ namespace CGAL {
                           continue;
                         }
 #endif
-                        boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &verbose, &res_contours, &vect_oioa, &mtx_] {
+                        boost::asio::post(pool4, [&oioa1, &verbose, &vect_oioa, &mtx_] {
                           ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset. На один offset может быть несколько контуров.
 
                           CGAL::Real_timer timer2; // Общее время рассчёта всех SS (вместе с загрузкой данных)
@@ -3290,7 +3288,10 @@ namespace CGAL {
                               /// <image url="..\code_images\file_0073.png" scale=".2"/>
                               /// <image url="..\code_images\file_0088.png" scale=".5"/>
                               /// </summary>
+
+#ifdef _DEBUG
                               std::vector<std::uint32_t> beveled_indexes; // для тестов. Для рассчётов не требуется
+#endif
                               /// <summary>
                               /// Важно для точки типа PROJECT_POINT. Индекс точки из какой проектной точки она получена.
                               /// </summary>
@@ -3523,20 +3524,23 @@ namespace CGAL {
                               /// <summary>
                               /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
                               /// </summary>
-                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_index) {
+                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_index, boost::mutex& mtx_) {
                                 // Получить проектную точку
                                 auto& ppoint = map__point_index__calc_point[point_index];
                                 // Проверить, имеется ли у неё указанное применение:
                                 const auto& ss_id__vertex_id = std::tuple(ppoint.ss_id, ppoint.vertex_id, profile_face_index, application_index);
-                                const auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 int res_counter = -1;
+                                mtx_.lock();
+                                const auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 if (it == map__ss_id__vertex_id.end()) {
                                   // Добавить её в список результирующих точек
                                   res_counter = ss_intersects_he_points_counter++; // ++ не просто так стоит после, т.к. после "захвата" индекса надо сразу задать следующий индекс.
                                   // Запомнить её индекс
                                   map__ss_id__vertex_id[ss_id__vertex_id] = res_counter;
+#ifdef _DEBUG
                                   // Запомнить индексы точек, в которые была преобразована SS точка PROJECT_POINT
                                   ppoint.beveled_indexes.push_back(res_counter);
+#endif
                                   // Создать реальную точку из проектной
                                   map__point_index__calc_point[res_counter] = SHAPE_POINT(
                                     res_counter,
@@ -3555,7 +3559,9 @@ namespace CGAL {
                                     ppoint.event_time /*Используется для повторения высоты точки, если она находится между двумя offset-ами*/
                                   );
                                   // Запомнить в новой точке индекс, от которого эта точка получена. Для тестов.
+#ifdef _DEBUG
                                   map__point_index__calc_point[res_counter].beveled_indexes.push_back(ppoint.index);
+#endif
                                   //if (map__point_index__calc_point[point_index].beveled_indexes.size() > 4) {
                                   //  printf("\n get_index_or_append_vertex_application_counter. res_counter=% 5d => %5d;", point_index, res_counter);
                                   //}
@@ -3565,6 +3571,7 @@ namespace CGAL {
                                   auto& [tpl, _res_counter] = (*it);
                                   res_counter = _res_counter;
                                 }
+                                mtx_.unlock();
                                 return res_counter;
                               };
                             };
@@ -4274,11 +4281,11 @@ namespace CGAL {
                                                           // TODO: Надо подумать, как избежать такого артифакта при shade_smooth <image url="..\code_images\file_0083.png" scale=".5"/>. Это происходит из-за попадания 0-й точки в отрезок.
 
                                                           // Определить индекс для точки типа PROJECT_POINT на основе перекрытия. Если такой точки нет, то создать её и вернуть её индекс.
-                                                          mtx_.lock();
+                                                          //mtx_.lock();
                                                           int application_index = ++map__point_index__counter[calc_point.index]; // Используется свойство map, что если элемента в map ещё не было с этим ключём, то по умолчанию в int создаётся 0.
                                                           // Оставлю для истории, какая ошибка появилась в алгоритме с появлением profile_face_index: <image url="..\code_images\file_0085.png" scale=".1"/>
-                                                          int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_index);
-                                                          mtx_.unlock();
+                                                          int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_index, mtx_);
+                                                          //mtx_.unlock();
                                                           vect_faces.back().face_verts_indexes.push_back(point_index);
                                                         }
                                                         continue;
@@ -4502,7 +4509,9 @@ namespace CGAL {
                                           point_id = beveled_mesh.add_vertex(shape_point.point);
                                           map__beveled_points_vertex_indexes[beveled_point_index] = point_id;
                                           auto point_id_idx = point_id.idx();
+#ifdef _DEBUG
                                           shape_point.beveled_indexes.push_back(point_id_idx);
+#endif
                                         } else {
                                           auto& [_point_index, _point_id] = *it_beveled_points;
                                           point_id = _point_id;
