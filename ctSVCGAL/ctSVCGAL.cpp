@@ -796,6 +796,35 @@ namespace CGAL {
         };
 
         /// <summary>
+        /// Используется для хранения соответствия исходных параметров (при очередном рефакторинге из OIOA была удалена часть информации, которая была нужна и теперь она переместилась сюда)
+        /// </summary>
+        struct OFFSET__OFFSET_INDEX__ALTITUDE{
+          /// <summary>
+          /// Отступ от контура
+          /// </summary>
+          FT offset;
+          
+          /// <summary>
+          /// Высота контура
+          /// </summary>
+          FT altitude;
+
+          /// <summary>
+          /// Порядковый номер отступа по исходным данным
+          /// </summary>
+          int offset_index;
+
+          OFFSET__OFFSET_INDEX__ALTITUDE(FT _offset, FT _altitude, int _offset_index)
+            :offset(_offset), altitude(_altitude), offset_index(_offset_index) {
+
+          }
+          OFFSET__OFFSET_INDEX__ALTITUDE()
+            :offset(0.0), altitude(0.0), offset_index(-1) {
+
+          }
+        };
+
+        /// <summary>
         /// Object Index, Offset index, offset, Altitude, Polygon, ss, ss_id. Сопоставленные objects, planes, offsets, altitudes и помнить порядок в котором заданы offsets:
         /// </summary>
         struct OIOA {
@@ -810,17 +839,17 @@ namespace CGAL {
           /// но по какой-то причине объект должен иметь этот instance, например, когда смешиваются точки пересечения offset-ов и точек объекта, то точки объекта тоже
           /// хранят в себе значение этого класса, но это только для совместимости в пределах списка)
           /// </summary>
-          int offset_index;
+          //int offset_index;
 
           /// <summary>
           /// Величина рассматриваемого offset
           /// </summary>
           FT offset;
 
-          /// <summary>
-          /// Высота altitude для offset
-          /// </summary>
-          FT altitude;
+          ///// <summary>
+          ///// Высота altitude для offset
+          ///// </summary>
+          //FT altitude;
 
           /// <summary>
           /// Straight Skeleton, соответствующий рассматриваемому offset-у (offset) (выставляется только после рассчёта SS).
@@ -839,6 +868,7 @@ namespace CGAL {
           /// Этот тип имеет смысл только при описании полигона с отрицательным offset. <image url="..\code_images\file_0044.png" scale="1.0"/>
           /// </summary>
           enum NEGATIVE_TYPE {
+            UNDEFINED,
             /// <summary>
             /// Элемент получен добавлением виртуального внешнего 4-х гранного face.
             /// </summary>
@@ -859,12 +889,16 @@ namespace CGAL {
           /// </summary>
           std::unordered_map<HDS_Halfedge_const_handle, Point_2> map_halfedge_to_offset_points;
 
-          OIOA(int _object_index, int _offset_index, FT _offset, FT _altitude)
-            : object_index(_object_index), offset_index(_offset_index), offset(_offset), neg_type(NEGATIVE_TYPE::INVERTED_HOLE), altitude(_altitude){
+          OIOA(int _object_index /*, int _offset_index*/, FT _offset /*, FT _altitude*/)
+            : object_index(_object_index) /*, offset_index(_offset_index)*/, offset(_offset), neg_type(NEGATIVE_TYPE::INVERTED_HOLE) /*, altitude(_altitude)*/ {
           }
 
-          OIOA(int _object_index, int _offset_index, FT _offset, NEGATIVE_TYPE _neg_type, FT _altitude)
-            :object_index(_object_index), offset_index(_offset_index), offset(_offset), neg_type(_neg_type), altitude(_altitude) {
+          OIOA(int _object_index /*, int _offset_index*/, FT _offset, NEGATIVE_TYPE _neg_type /*, FT _altitude*/ )
+            :object_index(_object_index) /*, offset_index(_offset_index)*/, offset(_offset), neg_type(_neg_type) /*, altitude(_altitude)*/ {
+          }
+
+          OIOA()
+            :object_index(-1) /*, offset_index(_offset_index)*/, offset(0.0), neg_type(NEGATIVE_TYPE::UNDEFINED) /*, altitude(_altitude)*/ {
           }
         }; // OOAI
 
@@ -876,7 +910,7 @@ namespace CGAL {
           /// <summary>
           /// Straight Skeleton, соответствующий параметрам offset-а oioa (выставляется только после рассчёта SS).
           /// </summary>
-          std::shared_ptr<Ss> ss{ nullptr };
+          //std::shared_ptr<Ss> ss{ nullptr };
           /// <summary>
           /// id Straight Skeleton из ss. -1 - не установлено.
           /// </summary>
@@ -892,8 +926,8 @@ namespace CGAL {
           /// </summary>
           std::unordered_map<HDS_Halfedge_const_handle, Point_2> map__halfedge__offset_points;
 
-          SS__HalfEdge__Point_2(std::shared_ptr<Ss> _ss, size_t _ss_id, OIOA::NEGATIVE_TYPE _neg_type , std::unordered_map<HDS_Halfedge_const_handle, Point_2> _map__halfedge__offset_points)
-            :ss{ _ss }, ss_id{ _ss_id }, neg_type {_neg_type}, map__halfedge__offset_points{_map__halfedge__offset_points}
+          SS__HalfEdge__Point_2(/*std::shared_ptr<Ss> _ss,*/ size_t _ss_id, OIOA::NEGATIVE_TYPE _neg_type , std::unordered_map<HDS_Halfedge_const_handle, Point_2> _map__halfedge__offset_points)
+            :/*ss{ _ss },*/ ss_id{ _ss_id }, neg_type {_neg_type}, map__halfedge__offset_points{_map__halfedge__offset_points}
           {
 
           }
@@ -908,9 +942,13 @@ namespace CGAL {
         struct OIOA_OFFSET_SS_PARAMS {
 
           /// <summary>
-          /// Параметры отступа offset: Object Index, Offset index, offset, Altitude, Polygon. Сопоставленные objects, planes, offsets, altitudes и помнить порядок в котором заданы offsets:
+          /// Параметры отступа offset: Object Index, Offset index (не применяется), offset, Altitude (не применяется), Polygon. Сопоставленные objects, planes, offsets, altitudes (не применяется) и помнить порядок в котором заданы offsets:
           /// </summary>
           OIOA oioa1;
+
+          FT offset;
+          size_t offset_index;
+          FT altitude;
 
           /// <summary>
           /// Состав в полигонах текущего offset (с его параметрами). Имеет смысл, когда mode является edges или faces.
@@ -943,8 +981,8 @@ namespace CGAL {
           ///// </summary>
           //std::unordered_map<HDS_Halfedge_const_handle, Point_2> map_halfedge_to_offset_points;
 
-          OIOA_OFFSET_SS_PARAMS(OIOA _oioa1, std::vector<Polygon_with_holes_2> _vect_pwh, std::vector<SS__HalfEdge__Point_2> _vect__SS__HalfEdge__Point_2)
-            :oioa1(_oioa1), vect_pwh(_vect_pwh), vect__SS__HalfEdge__Point_2(_vect__SS__HalfEdge__Point_2) {
+          OIOA_OFFSET_SS_PARAMS(OIOA _oioa1, FT _offset, size_t _offset_index, FT _altitude,  std::vector<Polygon_with_holes_2> _vect_pwh, std::vector<SS__HalfEdge__Point_2> _vect__SS__HalfEdge__Point_2)
+            :oioa1(_oioa1), offset(_offset), offset_index(_offset_index), altitude(_altitude), vect_pwh(_vect_pwh), vect__SS__HalfEdge__Point_2(_vect__SS__HalfEdge__Point_2) {
           }
         };
 
@@ -969,7 +1007,7 @@ namespace CGAL {
           /// <summary>
           /// Вектор параметров для нескольких offset для рассматриваемого PWH (даже если offset один, то его надо обернуть в вектор)
           /// </summary>
-          std::vector<OIOA> vect_oioa;
+          std::map<FT, OIOA> map__offset__oioa;
 
           SS_TYPE ss_type;
 
@@ -997,8 +1035,8 @@ namespace CGAL {
           std::vector<SS__HalfEdge__Point_2> vect__SS__HalfEdge__Point_2;
 
 
-          POMS(int _object_index, std::shared_ptr<Polygon_with_holes_2> _polygon1_with_holes, std::vector<OIOA> _vect_oioa, SS_TYPE _ss_type)
-            :polygon1_with_holes(_polygon1_with_holes), vect_oioa(_vect_oioa), ss_type(_ss_type) {
+          POMS(int _object_index, std::shared_ptr<Polygon_with_holes_2> _polygon1_with_holes, std::map<FT, OIOA> _vect_oioa, SS_TYPE _ss_type)
+            :polygon1_with_holes(_polygon1_with_holes), map__offset__oioa(_vect_oioa), ss_type(_ss_type) {
             object_index = _object_index;
           }
         };
@@ -1077,7 +1115,7 @@ namespace CGAL {
               std::vector<std::vector<unsigned int>> vect_edges;
               unsigned int p_index = 0;
               for (auto& p1 : cs1) {
-                vect_points.push_back({ (float)CGAL::to_double(p1.x()), (float)CGAL::to_double(p1.y()), (float)CGAL::to_double(pwh1_offset.oioa1.altitude) });
+                vect_points.push_back({ (float)CGAL::to_double(p1.x()), (float)CGAL::to_double(p1.y()), (float)CGAL::to_double(pwh1_offset.altitude) });
                 vect_edges.push_back({ contour_cursor + point_cursor + p_index, contour_cursor + point_cursor + p_index + 1 });
                 p_index++;
               }
@@ -1366,7 +1404,7 @@ namespace CGAL {
             // Исходный индекс объекта
             int object_index;
             // Список offsets и altitudes
-            std::vector<OIOA> vect_oioa;
+            std::map<FT/*offset*/, OIOA> map__offset__oioa;
             std::vector<OFFSET_EDGE> vect_offset_edges;
             // Контуры исходных планов
             std::vector<ContourSequence> source_planes;
@@ -1375,13 +1413,13 @@ namespace CGAL {
             
             SS_TYPE ss_type;
 
-            ClsObject(int _object_index, std::vector<OIOA> _vect_ooai, std::vector<ContourSequence> _source_planes, SS_TYPE _ss_type)
-              :source_planes(_source_planes), vect_oioa(_vect_ooai), ss_type(_ss_type) {
+            ClsObject(int _object_index, std::map<FT, OIOA> _map_ooai, std::vector<ContourSequence> _source_planes, SS_TYPE _ss_type)
+              :source_planes(_source_planes), map__offset__oioa(_map_ooai), ss_type(_ss_type) {
               object_index = _object_index;
             }
           };
 
-          std::vector<OIOA> res_contours; // Результаты расчёта всех контуров. Результаты будут сортироваться с учётом вложенности контуров по offset_index, в которой offset подавались на вход (по объектам) и с учётом параметра join_mode.
+          std::map<int /*object_id*/, std::map<FT /*offset*/, std::vector<OIOA>>> res_contours; // Результаты расчёта всех контуров. Результаты будут сортироваться с учётом вложенности контуров по offset_index, в которой offset подавались на вход (по объектам) и с учётом параметра join_mode.
           std::vector<ObjectError> res_errors; // Собирать ошибки в объектах при загрузке исходных данных и когда попытка использовать контур привела к его исключению из расчёта. Относится только к исходным объектам.
 
           int v_pos = 0;
@@ -1391,6 +1429,7 @@ namespace CGAL {
           //std::map<int, std::vector<OFFSET_EDGE>> map__object_index__offset_edges;
           std::map<int, std::vector/*faces*/<std::vector<int /*индексы offset для соединения*/>>> map__object_index__profile_faces;
           std::map<int, std::vector/*faces*/<int>> map__object_index__profile_faces__open_modes;
+          std::map<int /*object_id*/, std::map<int/*offset_index*/, OFFSET__OFFSET_INDEX__ALTITUDE>> map__object_id__offset_index__offset__offset_info;
           
           // Вектор параметров для рассчёта SS.
           std::vector<POMS> vect_polygon1_oioa;
@@ -1414,6 +1453,7 @@ namespace CGAL {
               int profile__faces_open_mode_cursor = 0;
 
               for (int I = 0; I <= in_count_of_objects - 1; I++) {
+                map__object_id__offset_index__offset__offset_info[I] = std::map<int/*offset_index*/, OFFSET__OFFSET_INDEX__ALTITUDE>();
                 std::vector<ContourSequence> planes;
                 int count_of_planes1 = in_count_of_planes[I];
                 for (int IJ = 0; IJ <= count_of_planes1 - 1; IJ++, plane_cursor++) {
@@ -1531,11 +1571,14 @@ namespace CGAL {
                 // Даже если plane нет, но нужно загрузить сопутствующие параметры offsets для объекта:
                 {
                   int in_count_of_offsets1 = in_count_of_offsets[I];
-                  std::vector<OIOA> vect_ooai;
+                  std::map<FT, OIOA> map_oioa;
                   for (int IJ = 0; IJ <= in_count_of_offsets1 - 1; IJ++) {
                     float in_offset1 = in_offsets[offset_cursor];
                     float in_altitude1 = in_altitudes[offset_cursor];
-                    vect_ooai.push_back(OIOA(I, IJ, in_offset1, in_altitude1));
+                    map__object_id__offset_index__offset__offset_info[I][IJ] = OFFSET__OFFSET_INDEX__ALTITUDE(in_offset1, in_altitude1, IJ);
+                    if (map_oioa.find(in_offset1) == map_oioa.end()) {
+                      map_oioa[in_offset1] = OIOA(I /*, IJ*/, in_offset1 /*, in_altitude1*/);
+                    }
                     offset_cursor++;
                   }
                   
@@ -1557,7 +1600,7 @@ namespace CGAL {
                   map__object_index__profile_faces            [I] = vect__profile_faces__face_indexes;
                   map__object_index__profile_faces__open_modes[I] = vect__profile_faces__open_mode;
 
-                  objects.push_back(ClsObject(I, vect_ooai, planes, SS_TYPE::UNDEFINED) );
+                  objects.push_back(ClsObject(I, map_oioa, planes, SS_TYPE::UNDEFINED) );
                 }
               }
               timer1.stop();
@@ -1579,9 +1622,13 @@ namespace CGAL {
               }
               CGAL::Real_timer timer1;
               timer1.start();
+              
               // Представить список объектов в зависимости от параметра source_objects_join_mode
               std::vector<ClsObject> vect_split_mode;
-              ClsObject objects_merge_mode(0, std::vector<OIOA>(), std::vector<ContourSequence>(), SS_TYPE::UNDEFINED);
+              std::map<int /*object_id*/, std::map<int/*offset_index*/, OFFSET__OFFSET_INDEX__ALTITUDE>> map__object_id__offset_index__offset__offset_info__split_mode;
+
+              ClsObject objects_merge_mode(0, std::map<FT, OIOA>(), std::vector<ContourSequence>(), SS_TYPE::UNDEFINED);
+              std::map<int /*object_id*/, std::map<int/*offset_index*/, OFFSET__OFFSET_INDEX__ALTITUDE>> map__object_id__offset_index__offset__offset_info__merge_mode;
               int object_index = 0;
               // Continue with good contours to load into Polygon_with_holes_2:
               for (auto& object1 : objects) {
@@ -1635,24 +1682,27 @@ namespace CGAL {
                     if (source_objects_join_mode == 0 /* 0 - split */) {
                       std::vector<ContourSequence> vect_cs;
                       vect_cs.push_back( plane1 );
-                      std::vector<OIOA> vect_oioa1;
-                      for (auto& oioa1 : object1.vect_oioa) {
-                        OIOA _oioa1(object_index, oioa1.offset_index, oioa1.offset, oioa1.altitude);
-                        vect_oioa1.push_back(_oioa1);
+                      std::map<FT, OIOA> map__oioa1;
+                      for (auto& [offset, oioa1] : object1.map__offset__oioa) {
+                        OIOA _oioa1(object_index /*, oioa1.offset_index*/, oioa1.offset /*, oioa1.altitude*/);
+                        map__oioa1[offset] = _oioa1;
                       }
-                      auto obj1 = ClsObject(object_index, vect_oioa1, vect_cs, SS_TYPE::UNDEFINED );
+                      auto obj1 = ClsObject(object_index, map__oioa1, vect_cs, SS_TYPE::UNDEFINED );
                       obj1.vect_polygons_with_holes.push_back(ppwh);
                       vect_split_mode.push_back(obj1);
+                      map__object_id__offset_index__offset__offset_info__split_mode[object_index] = map__object_id__offset_index__offset__offset_info__split_mode[object1.object_index];
+
                       object_index++;
                     } else if (source_objects_join_mode == 1 /* 1 - Keep source */) {
                       object1.vect_polygons_with_holes.push_back(ppwh);
                     } else /* 2 - merge */ {
-                      if (objects_merge_mode.vect_oioa.size() == 0) {
+                      if (objects_merge_mode.map__offset__oioa.size() == 0) {
                         // При merge использовать только параметры первого объекта. После загрузки данных oioa первого объекта остальные данные объектов oioa не используются
-                        objects_merge_mode.vect_oioa.assign(object1.vect_oioa.begin(), object1.vect_oioa.end());
+                        objects_merge_mode.map__offset__oioa = object1.map__offset__oioa;
                       }
                       objects_merge_mode.source_planes.push_back(plane1);
                       objects_merge_mode.vect_polygons_with_holes.push_back(ppwh);
+                      map__object_id__offset_index__offset__offset_info__merge_mode[objects_merge_mode.object_index] = map__object_id__offset_index__offset__offset_info[objects[0].object_index]; // TODO:: надо подумать можно ли нормально смержить данные по offsets и altidudes всех объектов без конфликтов. Пока берём данные только первого объекта
                     }
                   }
                 }
@@ -1660,11 +1710,13 @@ namespace CGAL {
               if (source_objects_join_mode == 0 /* 0 - split */) {
                 objects.clear();
                 objects = vect_split_mode;
+                map__object_id__offset_index__offset__offset_info = map__object_id__offset_index__offset__offset_info__split_mode;
               } else if (source_objects_join_mode == 1 /* 1 - Keep source */) {
                 // none. Use "objects"
               } else /* 2 - merge */ {
                 objects.clear();
                 objects.push_back(objects_merge_mode);
+                map__object_id__offset_index__offset__offset_info = map__object_id__offset_index__offset__offset_info__merge_mode;
               }
               timer1.stop();
               if (verbose == true) {
@@ -1891,9 +1943,9 @@ namespace CGAL {
                     int I = 0;
                     std::vector<int> vectI_to_erase;
                     for (auto& object1 : objects) {
-                      for (auto& oioa1 : object1.vect_oioa) {
+                      for (auto& [offset, oioa1] : object1.map__offset__oioa) {
                         if (oioa1.offset < 0) {
-                          ClsObject negObject(object1.object_index, object1.vect_oioa, std::vector<ContourSequence>(), SS_TYPE::UNDEFINED /*Пока как неопределённый тип. Он вычислиться позже*/);
+                          ClsObject negObject(object1.object_index, object1.map__offset__oioa, std::vector<ContourSequence>(), SS_TYPE::UNDEFINED /*Пока как неопределённый тип. Он вычислиться позже*/);
                           for (auto& pwh : object1.vect_polygons_with_holes) {
                             negObject.vect_polygons_with_holes.push_back(std::move(pwh));
                           }
@@ -2047,7 +2099,8 @@ namespace CGAL {
                           // <image url="..\code_images\file_0009.png" scale=".2"/>
                           {
                             // std::min_element - потому что ищем максимум отрицательного отступа. Соответственно максимальное значение по модулю будет у минимального отрицательного элемента (-20, -5, -1, -10) - максимальное отрицательное числе =-20.
-                            auto max_abs_negative_offset = abs(std::min_element(object1NegativeOffsetSS.object1.vect_oioa.begin(), object1NegativeOffsetSS.object1.vect_oioa.end(), [](const OIOA& o1, const OIOA& o2) { return o1.offset < o2.offset; })->offset);
+                            //auto max_abs_negative_offset = abs(std::min_element(object1NegativeOffsetSS.object1.map__offset__oioa.begin(), object1NegativeOffsetSS.object1.map__offset__oioa.end(), [](const OIOA& o1, const OIOA& o2) { return o1.offset < o2.offset; })->offset);
+                            auto max_abs_negative_offset = abs(object1NegativeOffsetSS.object1.map__offset__oioa.begin()->first /*Какое неожиданное решение с поиском минимального значения ключа в map, т.к. map является сортируемым и ключ в первом элементе является минимальным!!!*/);
                             auto max_abs_negative_offset_d = CGAL::to_double(max_abs_negative_offset);
                             std::vector<FT> vxmin, vymin, vxmax, vymax;
                             ContourSequence allowed_polygons; // Для каких полигонов удалось вычислить margin
@@ -2091,11 +2144,11 @@ namespace CGAL {
                                 cs_frame.push_back(std::move(hole1));
                               }
 
-                              ClsObject object1FrameForNegativeOffsets(object1NegativeOffsetSS.object1.object_index, std::vector<OIOA>(), std::vector<ContourSequence>(), SS_TYPE::NEGATIVE_WITH_EXTERNAL_FRAME);
+                              ClsObject object1FrameForNegativeOffsets(object1NegativeOffsetSS.object1.object_index, std::map<FT, OIOA>(), std::vector<ContourSequence>(), SS_TYPE::NEGATIVE_WITH_EXTERNAL_FRAME);
                               object1FrameForNegativeOffsets.source_planes.push_back(cs_frame);
-                              for (auto& oioa1 : object1NegativeOffsetSS.object1.vect_oioa) {
-                                if (oioa1.offset < 0) {
-                                  object1FrameForNegativeOffsets.vect_oioa.push_back(OIOA(oioa1.object_index, oioa1.offset_index, oioa1.offset, OIOA::NEGATIVE_TYPE::WITH_EXTERNAL_FRAME, oioa1.altitude));
+                              for (auto& [offset, oioa1] : object1NegativeOffsetSS.object1.map__offset__oioa) {
+                                if (offset < 0) {
+                                  object1FrameForNegativeOffsets.map__offset__oioa[offset] = OIOA(oioa1.object_index /*, oioa1.offset_index*/, oioa1.offset, OIOA::NEGATIVE_TYPE::WITH_EXTERNAL_FRAME /*, oioa1.altitude*/);
                                 }
                               }
                               object1FrameForNegativeOffsets.vect_polygons_with_holes.push_back(main_outer_negative_offset_polygon); // <- Не забывать подгружать получающиеся полигоны для рассчёта. Так-то можно было бы сделать их получение после рассчёта отрицательных offsets, но раньше пришлось проверять пересечения контуров, а это требовало наличия полигонов. Поэтому, раз получены новые контуры для расчёта отрицательных полигонов, то нужно нужно их преобразовать в полигон.
@@ -2108,13 +2161,13 @@ namespace CGAL {
 
                           if (vect_cs_inverted_holes.size() > 0) {
                             // Если имеются инвертированные holes, то нужно добавить их в общий стек расчёта:
-                            ClsObject object1WithInvertedHoles(object1NegativeOffsetSS.object1.object_index, std::vector<OIOA>(), vect_cs_inverted_holes, SS_TYPE::NEGATIVE_INVERTED_HOLE);
-                            for (OIOA& oap1 : object1NegativeOffsetSS.object1.vect_oioa) {
-                              if (oap1.offset < 0) {
-                                object1WithInvertedHoles.vect_oioa.push_back(OIOA(object1NegativeOffsetSS.object1.object_index, oap1.offset_index, oap1.offset /*abs берётся позже*/, OIOA::NEGATIVE_TYPE::INVERTED_HOLE, oap1.altitude));
+                            ClsObject object1WithInvertedHoles(object1NegativeOffsetSS.object1.object_index, std::map<FT, OIOA>(), vect_cs_inverted_holes, SS_TYPE::NEGATIVE_INVERTED_HOLE);
+                            for (auto& [offset, oioa1] : object1NegativeOffsetSS.object1.map__offset__oioa) {
+                              if (offset < 0) {
+                                object1WithInvertedHoles.map__offset__oioa[offset] = OIOA(object1NegativeOffsetSS.object1.object_index /*, oioa1.offset_index*/, oioa1.offset /*abs берётся позже*/, OIOA::NEGATIVE_TYPE::INVERTED_HOLE /*, oioa1.altitude*/);
                               }
                             }
-                            if (object1WithInvertedHoles.vect_oioa.size() > 0) {
+                            if (object1WithInvertedHoles.map__offset__oioa.size() > 0) {
                               // Добавить в объект с инвертированными holes сами инвертированные полигоны:
                               for (auto& plane1 : vect_cs_inverted_holes) {
                                 if (plane1.size() > 0) {
@@ -2141,15 +2194,15 @@ namespace CGAL {
 
                           {
                             // Если в объекте есть не только отрицательные offsets, но и положительные, то нужно задать параметры и для их расчёта тоже:
-                            std::vector<OIOA> vect_oioa;
-                            for (auto& oioa1 : object1NegativeOffsetSS.object1.vect_oioa) {
-                              if (oioa1.offset >= 0) {
-                                vect_oioa.push_back(OIOA(oioa1.object_index, oioa1.offset_index, oioa1.offset, oioa1.altitude));
+                            std::map<FT, OIOA> map__offset__oioa;
+                            for (auto& [offset, oioa1] : object1NegativeOffsetSS.object1.map__offset__oioa) {
+                              if (offset >= 0) {
+                                map__offset__oioa[offset] = OIOA(oioa1.object_index /*, oioa1.offset_index*/, offset /*, oioa1.altitude*/);
                               }
                             }
                             //if (vect_oioa.size() > 0) - Это условие отменено, т.е. в будущем для рассчёта faces SS требуются все SS и положительные и отрицательные. vect_oioa.size==0, когда все offset сконцентрированы в отрицательной зоне (даже без 0)
                             {
-                              ClsObject object1WithPositiveOffsets(object1NegativeOffsetSS.object1.object_index, vect_oioa, object1NegativeOffsetSS.object1.source_planes, SS_TYPE::POSITIVE);
+                              ClsObject object1WithPositiveOffsets(object1NegativeOffsetSS.object1.object_index, map__offset__oioa, object1NegativeOffsetSS.object1.source_planes, SS_TYPE::POSITIVE);
                               for (auto& pwh1 : object1NegativeOffsetSS.object1.vect_polygons_with_holes) {
                                 object1WithPositiveOffsets.vect_polygons_with_holes.push_back(pwh1);
                               }
@@ -2171,7 +2224,7 @@ namespace CGAL {
                     // Отсортировать по offsets. Будет удобно считать, если при увеличении отступа пропадёт контур,то и считать следующие бОльшие контуры не надо
                     // - в многопоточности это уже не актуально. Может и можно в итоге прервать, но надо поискать другой метод. sort(positive_offsets_data1.vect_oap.begin(), positive_offsets_data1.vect_oap.end(), [](const OAP& oap1, const OAP& oap2) {return oap1.offset < oap2.offset; });
                     // Положительные отступы считаются по одному
-                    POMS p1(object1.object_index, std::shared_ptr<Polygon_with_holes_2>(), object1.vect_oioa, object1.ss_type /*Изначально все создаваемые полигоны неопределены, т.к. отрицательные отступы рассчитываются разделением PWH-полигонов на вспомогательные объекты*/);
+                    POMS p1(object1.object_index, std::shared_ptr<Polygon_with_holes_2>(), object1.map__offset__oioa, object1.ss_type /*Изначально все создаваемые полигоны неопределены, т.к. отрицательные отступы рассчитываются разделением PWH-полигонов на вспомогательные объекты*/);
                     p1.polygon1_with_holes = std::move(polygon_with_holes1);
                     vect_polygon1_oioa.push_back(p1);
                   }
@@ -2180,6 +2233,7 @@ namespace CGAL {
                 int threadNumbers = boost::thread::hardware_concurrency();
                 boost::mutex mtx_;
 
+                // Многопоточный рассчёт SS.
                 {
                   CGAL::Real_timer timer1; // Общее время рассчёта всех SS (вместе с загрузкой данных в SS)
                   timer1.start();
@@ -2190,7 +2244,7 @@ namespace CGAL {
                   auto vect_polygon1_oioa_rest = vect_polygon1_oioa_size;
                   for (auto& polygon1_oioa : vect_polygon1_oioa) {
                     ss_id_counter++;
-                    boost::asio::post(pool3, [ss_id_counter, &polygon1_oioa, &res_errors, &res_contours, threads_counts, verbose, vect_polygon1_oioa_size, &vect_polygon1_oioa_rest, use_cache_of_straight_skeleton, &mtx_] {
+                    boost::asio::post(pool3, [ss_id_counter, &polygon1_oioa, &res_errors, threads_counts, verbose, vect_polygon1_oioa_size, &vect_polygon1_oioa_rest, use_cache_of_straight_skeleton, &mtx_] {
                       unsigned int crc_val = 0;
                       bool is_crc_calculated = false;
                       SsBuilder ssb;
@@ -2307,13 +2361,14 @@ namespace CGAL {
                       if (polygon1_oioa.ss) {
                         polygon1_oioa.ss_id = ss_id_counter;
                         // Запомнить ss_id в соответствующих ему oioa (ss_id не зависит от индескса объекта и является сквозным)
-                        for (auto& oioa1 : polygon1_oioa.vect_oioa) {
+                        for (auto& [offset, oioa1] : polygon1_oioa.map__offset__oioa) {
+                          oioa1.ss = polygon1_oioa.ss; // Сохранить привязку offset и SS.
                           oioa1.ss_id = ss_id_counter;
                         }
                       } else {
                         try {
                           // Не получилось посчитать Straight Skeleton. Надо сообщить о проблеме пользователю:
-                          res_errors.push_back(ObjectError(polygon1_oioa.vect_oioa[0].object_index, *polygon1_oioa.polygon1_with_holes.get(), VAL2STR(Msg::_0006)". Offset. Error Build Straight Skeleton. Outer Boundary"));
+                          res_errors.push_back(ObjectError(polygon1_oioa.map__offset__oioa[0].object_index, *polygon1_oioa.polygon1_with_holes.get(), VAL2STR(Msg::_0006)". Offset. Error Build Straight Skeleton. Outer Boundary"));
                         } catch (std::exception _ex) {
                           int error = 0;
                         }
@@ -2326,26 +2381,42 @@ namespace CGAL {
                   pool3.join();
                   timer1.stop();
                   if (verbose == true) {
-                    printf("\n " VAL2STR(Msg::_0045) ". SS 2D Offset. Count of SS: %d,                                                          build time: % 12.5f", threads_counts, timer1.time() );
+                    printf("\n " VAL2STR(Msg::_0045) ". SS 2D Offset. Count of SS: %d,                                                         build time: % 12.5f", threads_counts, timer1.time() );
                   }
                 }
 
+                // Многопоточный рассчёт offset
                 {
                   CGAL::Real_timer timer1; // Общее время рассчёта всех offset
                   timer1.start();
-                  // Рассчитать offset-ы в многопоточном режиме для всех SS
+                  for (POMS& polygon1_oioa : vect_polygon1_oioa) {
+                    if (polygon1_oioa.ss) {
+                      for (auto& [_offset, oioa1] : polygon1_oioa.map__offset__oioa) {
+                        // Загрузить получившиеся данные в массив с результатами:
+                        if (res_contours.find(oioa1.object_index) == res_contours.end()) {
+                          res_contours[oioa1.object_index] = std::map<FT /*offset*/, std::vector<OIOA>>();
+                        }
+                        if (res_contours[oioa1.object_index].find(oioa1.offset) == res_contours[oioa1.object_index].end()) {
+                          res_contours[oioa1.object_index][oioa1.offset] = std::vector<OIOA>();
+                        }
+                      }
+                    }
+                  }
+
                   boost::asio::thread_pool pool4(threadNumbers);
                   for (POMS& polygon1_oioa : vect_polygon1_oioa) {
                     if (polygon1_oioa.ss) {
-                      for (auto& oioa1 : polygon1_oioa.vect_oioa) {
-                        oioa1.ss = polygon1_oioa.ss; // Сохранить привязку offset и SS.
+                      for (auto& [_offset, _oioa1] : polygon1_oioa.map__offset__oioa) {
+                        //oioa1.ss = polygon1_oioa.ss; // Сохранить привязку offset и SS.
+                        auto& oioa1 = _oioa1;
+                        auto& vect_oioa = res_contours[oioa1.object_index][oioa1.offset];
 #ifdef _DEBUG
                         // Пропускать offset == 0 в Solution Configuration = _DEBUG, т.к. в _DEBUG срабатывает проверка на 0 в offset skeleton, хотя сам skeleton при 0 в Release строится нормально
                         if (is_zero(oioa1.offset)) {
                           continue;
                         }
 #endif
-                        boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &mtx_, &verbose, &res_contours] {
+                        boost::asio::post(pool4, [&polygon1_oioa, &oioa1, &verbose, &res_contours, &vect_oioa, &mtx_] {
                           ContourSequence offset_contours; // Instantiate the container of offset contours - Куда складывать контуры offset после вычисления offset. На один offset может быть несколько контуров.
 
                           CGAL::Real_timer timer2; // Общее время рассчёта всех SS (вместе с загрузкой данных)
@@ -2354,7 +2425,8 @@ namespace CGAL {
                           timer2.stop();
                           if (verbose == true) {
                             mtx_.lock();
-                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 3d, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id, oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
+                            //printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 3d, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id , oioa1.offset_index, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
+                            printf("\n " VAL2STR(Msg::_0046) ". SS 2D Offset. building offset. || ss_id: % 4zd, % 10.5f, build time: % 10.5f, cntrs: %3zu ", oioa1.ss_id, CGAL::to_double(oioa1.offset), timer2.time(), offset_contours.size());
                             if (offset_contours.size() > 0) {
                               printf("[");
                               for (auto& c1 : offset_contours) {
@@ -2436,10 +2508,17 @@ namespace CGAL {
                                 }
                               }
                             }
-                            mtx_.lock();
-                            // Загрузить получившиеся данные в массив с результатами:
-                            res_contours.push_back(oioa1);
-                            mtx_.unlock();
+                            //mtx_.lock();
+                            //// Загрузить получившиеся данные в массив с результатами:
+                            //if (res_contours.find(oioa1.object_index) == res_contours.end()) {
+                            //  res_contours[oioa1.object_index] = std::map<FT /*offset*/, std::vector<OIOA>>();
+                            //}
+                            //if (res_contours[oioa1.object_index].find(oioa1.offset) == res_contours[oioa1.object_index].end()) {
+                            //  res_contours[oioa1.object_index][oioa1.offset] = std::vector<OIOA>();
+                            //}
+                            //res_contours[oioa1.object_index][oioa1.offset].push_back(oioa1);
+                            //mtx_.unlock();
+                            vect_oioa.push_back(oioa1);
 
                           }
                           }); // boost::asio::post
@@ -2449,13 +2528,13 @@ namespace CGAL {
                   pool4.join();
                   timer1.stop();
                   if (verbose == true) {
-                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                                 calc of offsets general time: % 10.5f", timer1.time());
+                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                            calc of offsets general time: % 10.5f", timer1.time());
                   }
                 }
 
                 // Восстановить последовательность результатов расчётов offset по исходным позициям offset (как их задал пользователь):
-                sort(res_contours.begin(), res_contours.end(), [](const OIOA& oap1, const OIOA& oap2) {return oap1.offset_index < oap2.offset_index; });
-                sort(res_contours.begin(), res_contours.end(), [](const OIOA& oap1, const OIOA& oap2) {return oap1.object_index < oap2.object_index; });
+                //sort(res_contours.begin(), res_contours.end(), [](const OIOA& oap1, const OIOA& oap2) {return oap1.offset < oap2.offset; });
+                //sort(res_contours.begin(), res_contours.end(), [](const OIOA& oap1, const OIOA& oap2) {return oap1.object_index < oap2.object_index; });
                 sort(res_errors.begin(), res_errors.end(), [](const ObjectError& oap1, const ObjectError& oap2) {return oap1.object_index < oap2.object_index; });
               }
             } else {
@@ -2483,34 +2562,26 @@ namespace CGAL {
           // Отмапить результаты offset-ов на индексы исходных объектов.
           std::map<
             int /*индекс исходного объекта*/,
-            std::vector<OIOA> /*данные для полигонов для offset_index текущего объекта*/
-          > map_res_by_objectindex;
-          {
-            for (auto& object1 : objects) {
-              if (map_res_by_objectindex.find(object1.object_index) == map_res_by_objectindex.end()) {
-                map_res_by_objectindex[object1.object_index] = std::vector<OIOA>();
+            std::map<int /*offset_index*/, std::vector<OIOA>> /*данные для полигонов для offset_index текущего объекта*/
+          > map__object_index__offset_index__oioa;
+          // 1. Сгруппировать контуры результатов по объектам
+          for (auto& [object_index, map__offset_index__offset__offset_info] : map__object_id__offset_index__offset__offset_info) {
+            map__object_index__offset_index__oioa[object_index] = std::map<int, std::vector<OIOA>>();
+            for (auto& [offset_index, offset_info] : map__offset_index__offset__offset_info) {
+              for (auto& elem : res_contours[object_index][offset_info.offset]) {
+                map__object_index__offset_index__oioa[object_index][offset_index].push_back(elem);
               }
-            }
-            // 1. Сгруппировать контуры результатов по объектам
-            for (auto& shape1 : res_contours) {
-              map_res_by_objectindex[shape1.object_index].push_back(shape1);
-            }
-            // 2. Отсортировать offset по соответствующим им индексам по возрастанию в каждой группе (в результате расчёта в многопоточном режиме offset не обязательно будут посчитаны
-            // в порядке их поступления, требуется расположить их в том порядке, в котором они поступили в расчёт)
-            for (auto& map_res1 : map_res_by_objectindex) {
-              // Сортировать по offset_index
-              sort(map_res1.second.begin(), map_res1.second.end(), [](const OIOA& oioa1, const OIOA& oioa2) {return oioa1.offset_index < oioa2.offset_index; });
             }
           }
 
-          mesh_data->nn_source_objects_count = map_res_by_objectindex.size(); // Общее значение, используется при подготовке всех выходных данных
+          mesh_data->nn_source_objects_count = map__object_index__offset_index__oioa.size(); // Общее значение, используется при подготовке всех выходных данных
           {
             // Собрать все зарегистрированные ошибки из объекта res_errors:
             // 1. Сгруппировать ошибки по объектам:
             std::map<int, std::vector<ObjectError>> map_res_errors;
             // У каждого объекта должен быть список ошибок, даже если он нулевой длины, поэтому нужно сначала создать списки,
             // а потом их заполнить. Если res_errors окажется пустым, то не получится сообщить КАЖДОМУ объекту, что у него 0 ошибок...
-            for (auto& map_res1 : map_res_by_objectindex) {
+            for (auto& map_res1 : map__object_index__offset_index__oioa) {
               map_res_errors[map_res1.first] = std::vector<ObjectError>();
             }
             // ... Если ошибок не будет, то map_res_errors будет пустой
@@ -2614,19 +2685,20 @@ namespace CGAL {
 
               // Цикл обработки параметра vect_pwhs_offset_index_order (тут идёт распределение по object_index и offset_index):
               // После обработки в цикле в этом векторе будет содержаться следующая информация <image url="..\code_images\file_0042.png" scale=".1"/>
-              for (auto& [object_index, vect_object1] : map_res_by_objectindex) {
+              for (auto& [object_index, map__offset_index__oioa] : map__object_index__offset_index__oioa) {
                 // Собрать список контуров на одном уровне offset и сложить их в нужной последовательности,
                 // чтобы они выстроились в валидную фигуру с внешним контуром и отверстиями:
-                std::map<int, std::vector<OIOA>> object1_group_contours_by_offset_index;
-                for (auto& oioa1 : vect_object1) {
-                  if (object1_group_contours_by_offset_index.find(oioa1.offset_index) == object1_group_contours_by_offset_index.end()) {
-                      object1_group_contours_by_offset_index[oioa1.offset_index] = std::vector<OIOA>();
-                  }
-                  object1_group_contours_by_offset_index[oioa1.offset_index].push_back(oioa1);
-                }
 
-                for (auto& [idx, vect_oioa] /*Насколько я понимаю, map работает как упорядоченная коллекция и выдаёт результат в порядке offset_index, что является исходным заданным порядком*/
-                  : object1_group_contours_by_offset_index
+                //std::map<int, std::vector<OIOA>> object1_group_contours_by_offset_index;
+                //for (auto& [offset_index, vect_oioa] : map__offset_index__oioa) {
+                //  if (object1_group_contours_by_offset_index.find(offset_index) == object1_group_contours_by_offset_index.end()) {
+                //      object1_group_contours_by_offset_index[offset_index] = std::vector<OIOA>();
+                //  }
+                //  object1_group_contours_by_offset_index[offset_index].insert(object1_group_contours_by_offset_index[offset_index].end(), vect_oioa.begin(), vect_oioa.end());
+                //}
+
+                for (auto& [offset_index, vect_oioa] /*Насколько я понимаю, map работает как упорядоченная коллекция и выдаёт результат в порядке offset_index, что является исходным заданным порядком*/
+                  : map__offset_index__oioa
                   ) {
                   
                   ContourSequence cs_for_mesh;
@@ -2638,10 +2710,10 @@ namespace CGAL {
                       }
                     }
                     // Запоминать SS__HalfEdge__Point_2 даже когда oioa1.polygon_contours.size()==0 (SS__HalfEdge__Point_2 нужны для рассчётов в mode Bevel и Straight Skeleton)
-                    auto inst_SS_HalfEdge_Point_2 = SS__HalfEdge__Point_2(oioa1.ss, oioa1.ss_id, oioa1.neg_type, oioa1.map_halfedge_to_offset_points);
+                    auto inst_SS_HalfEdge_Point_2 = SS__HalfEdge__Point_2(/*oioa1.ss,*/ oioa1.ss_id, oioa1.neg_type, oioa1.map_halfedge_to_offset_points);
                     vect__SS__HalfEdge__Point_2.push_back(inst_SS_HalfEdge_Point_2);
                   }
-                  // Упорядочить вектор по ss_id в сторону увеличения. Для удобства, вроде как не должно ни на что влиять, но при отладке удобнее смотреть на одинаковый порядок.
+                  // Упорядочить вектор по ss_id в сторону увеличения. Для удобства, вроде как не должно ни на что влиять, но при отладке удобнее смотреть.
                   // Состав vect__SS__HalfEdge__Point_2: <image url="..\code_images\file_0039.png" scale=".025"/>
                   sort(vect__SS__HalfEdge__Point_2.begin(), vect__SS__HalfEdge__Point_2.end(), [](const auto& hhsp1, const auto& hhsp2) {return hhsp1.ss_id < hhsp2.ss_id; });
 
@@ -2650,10 +2722,14 @@ namespace CGAL {
                     if (cs_for_mesh.size() > 0) {
                       ConvertContourSequenceIntoPolygonsWithHoles(cs_for_mesh, vect_pwh);
                     }
-                    vect_pwhs_offset_index_order.push_back(OIOA_OFFSET_SS_PARAMS(
+                    vect_pwhs_offset_index_order.push_back(
+                      OIOA_OFFSET_SS_PARAMS(
                       // <image url="..\code_images\file_0040.png" scale=".2"/>
                       vect_oioa[0] /* Все элементы в vect_oioa имеют одинаковые object_index и offset_index oioa, поэтому и берём 0-й oioa объект */,
                       // <image url="..\code_images\file_0041.png" scale=".1"/> - список PWH из которого состоит "срез" текущего offset по всему объекту (пример при разных offset, но при вызове этот параметр только при одном offset)
+                      map__object_id__offset_index__offset__offset_info[object_index][offset_index].offset,
+                      offset_index,
+                      map__object_id__offset_index__offset__offset_info[object_index][offset_index].altitude,
                       vect_pwh,
                       vect__SS__HalfEdge__Point_2 /*Запомнить, какие SS связаны с текущим уровнем offset*/
                     ));
@@ -2685,8 +2761,8 @@ namespace CGAL {
                         pwh1_as_vector.push_back(pwh1);
                         std::vector<OIOA_OFFSET_SS_PARAMS> vect_PWHS_ALTITUDE_as_vector;
                         std::vector<SS__HalfEdge__Point_2> vect__SS__HalfEdge__Point_2;
-                        vect__SS__HalfEdge__Point_2.push_back(SS__HalfEdge__Point_2(pwhs_offset_index_order1.oioa1.ss, pwhs_offset_index_order1.oioa1.ss_id, pwhs_offset_index_order1.oioa1.neg_type, pwhs_offset_index_order1.oioa1.map_halfedge_to_offset_points));
-                        vect_PWHS_ALTITUDE_as_vector.push_back(OIOA_OFFSET_SS_PARAMS(pwhs_offset_index_order1.oioa1, pwh1_as_vector, vect__SS__HalfEdge__Point_2 /*Из какого SS получен текущий контур*/));
+                        vect__SS__HalfEdge__Point_2.push_back(SS__HalfEdge__Point_2(/*pwhs_offset_index_order1.oioa1.ss,*/ pwhs_offset_index_order1.oioa1.ss_id, pwhs_offset_index_order1.oioa1.neg_type, pwhs_offset_index_order1.oioa1.map_halfedge_to_offset_points));
+                        vect_PWHS_ALTITUDE_as_vector.push_back(OIOA_OFFSET_SS_PARAMS(pwhs_offset_index_order1.oioa1, pwhs_offset_index_order1.offset, pwhs_offset_index_order1.offset_index, pwhs_offset_index_order1.altitude, pwh1_as_vector, vect__SS__HalfEdge__Point_2 /*Из какого SS получен текущий контур*/));
                         map_join_mesh[split_object_index] = vect_PWHS_ALTITUDE_as_vector;
                         split_object_index++;
                       }
@@ -2725,7 +2801,7 @@ namespace CGAL {
                         map__object_id__ss_id__OIOA_OFFSET_SS_PARAMS[oioa_offset_ss_params.oioa1.object_index][ss_halfedge_point_2.ss_id] = std::vector<OIOA_OFFSET_SS_PARAMS>();
                       }
                       map__object_id__ss_id__OIOA_OFFSET_SS_PARAMS[oioa_offset_ss_params.oioa1.object_index][ss_halfedge_point_2.ss_id].push_back(
-                        OIOA_OFFSET_SS_PARAMS(oioa_offset_ss_params.oioa1, oioa_offset_ss_params.vect_pwh, std::vector<SS__HalfEdge__Point_2>(1, ss_halfedge_point_2))
+                        OIOA_OFFSET_SS_PARAMS(oioa_offset_ss_params.oioa1, oioa_offset_ss_params.offset, oioa_offset_ss_params.offset_index, oioa_offset_ss_params.altitude,  oioa_offset_ss_params.vect_pwh, std::vector<SS__HalfEdge__Point_2>(1, ss_halfedge_point_2))
                       );
                     }
                   }
@@ -3151,7 +3227,7 @@ namespace CGAL {
                                   if (map__ss_id__he_intersections_point2.find(he1.ss_id) == map__ss_id__he_intersections_point2.end()) {
                                     map__ss_id__he_intersections_point2[he1.ss_id] = std::vector<SS_Offset_HalfEdge_Intersections_Point_2>();
                                   }
-                                  map__ss_id__he_intersections_point2[he1.ss_id].push_back(SS_Offset_HalfEdge_Intersections_Point_2(offset_params.oioa1.offset, offset_params.oioa1.offset_index, offset_params.oioa1.altitude, /*he1.ss,*/ he1.map__halfedge__offset_points));
+                                  map__ss_id__he_intersections_point2[he1.ss_id].push_back(SS_Offset_HalfEdge_Intersections_Point_2(offset_params.oioa1.offset, offset_params.offset_index, offset_params.altitude, /*he1.ss,*/ he1.map__halfedge__offset_points));
                                 }
                               }
                             }
@@ -3639,7 +3715,10 @@ namespace CGAL {
                                               hds_h_slope == CGAL::POSITIVE && segment_faces_I.ss_sign == MeshFacePropertyStruct::SS_SIGN::NEGATIVE /* -SS */
                                               ) {
                                               // <image url="..\code_images\file_0076.png" scale=".3"/>
-                                              for (auto elem_it = map__ss_id__he_intersections_point2[segment_faces_I.ss_id /* ss_id брать не из цикла, а из рассматриваемой segment_faces_I, чтобы искать пересечения offset-ов со своим he */].rbegin(); elem_it != map__ss_id__he_intersections_point2[segment_faces_I.ss_id].rend(); ++elem_it) {
+                                              for (auto elem_it = map__ss_id__he_intersections_point2[segment_faces_I.ss_id /* ss_id брать не из цикла, а из рассматриваемой segment_faces_I, чтобы искать пересечения offset-ов со своим he */].rbegin();
+                                                elem_it != map__ss_id__he_intersections_point2[segment_faces_I.ss_id].rend();
+                                                ++elem_it
+                                                ) {
                                                 auto& intersection_points = (*elem_it);
                                                 auto offset0_he_intersect_iter = intersection_points.map__halfedge__offset_points.find(hds_offset_h);
                                                 if (offset0_he_intersect_iter != intersection_points.map__halfedge__offset_points.end()) {
@@ -3885,29 +3964,29 @@ namespace CGAL {
 
                                   // Набор индексов offset-ов;
                                   std::set<int> set__offset_index;
-                                  std::vector<OIOA> vect_object_offsets;
+                                  std::vector<int/*offset_index*/> vect__offset_index;
                                   std::vector<std::vector<EDGE_INFO>> vect__faces__edges;
                                   {
                                     // Список информации об offsets текущего объекта
                                     for (auto& [ss_id, oioa_offset_ss_params] : map__ss_id__OIOA_OFFSET_SS_PARAMS) {
                                       for (auto& offset_params : oioa_offset_ss_params) {
-                                        if (set__offset_index.find(offset_params.oioa1.offset_index) == set__offset_index.end()) {
-                                          set__offset_index.insert(offset_params.oioa1.offset_index);
-                                          vect_object_offsets.push_back(offset_params.oioa1);
+                                        if (set__offset_index.find(offset_params.offset_index) == set__offset_index.end()) {
+                                          set__offset_index.insert(offset_params.offset_index);
+                                          vect__offset_index.push_back(offset_params.offset_index);
                                         }
                                       }
                                     }
 
                                     // Отсортировать offset-ы в порядке как они задавались (по индексам):
-                                    std::sort(vect_object_offsets.begin(), vect_object_offsets.end(), [](const OIOA& o1, const OIOA& o2) {
-                                      bool res = o1.offset_index < o2.offset_index;
-                                      return res;
-                                      });
+                                    //std::sort(vect_object_offsets.begin(), vect_object_offsets.end(), [](const OIOA& o1, const OIOA& o2) {
+                                    //  bool res = o1.offset_index < o2.offset_index;
+                                    //  return res;
+                                    //  });
                                   }
 
                                   std::vector<int> vect_profile_faces__open_modes = map__object_index__profile_faces__open_modes[object_index];
                                   {
-                                    int vect_object_offsets_size = vect_object_offsets.size();
+                                    int vect_object_offsets_size = vect__offset_index.size();
                                     int face_index = 0;
                                     for (auto& face : vect__offset_faces) {
                                       int face_open_mode = vect_profile_faces__open_modes[face_index++];
@@ -3925,13 +4004,13 @@ namespace CGAL {
                                           if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
                                             vect__edges.push_back(
                                               EDGE_INFO(
-                                                vect_object_offsets[start_index].offset_index,
-                                                vect_object_offsets[start_index].offset,
-                                                vect_object_offsets[start_index].altitude,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].offset_index,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].offset,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].altitude,
                                                 false,
-                                                vect_object_offsets[end_index].offset_index,
-                                                vect_object_offsets[end_index].offset,
-                                                vect_object_offsets[end_index].altitude,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].offset_index,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].offset,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].altitude,
                                                 false));
                                           }
                                         }
@@ -3944,13 +4023,13 @@ namespace CGAL {
                                             // Если Индексы выходят за допустимый диапазон, то не делать соединения краёв в любом случае (TODO: по хорошему надо информировать пользователя ошибкой)
                                           } else {
                                             vect__edges.push_back(EDGE_INFO(
-                                              vect_object_offsets[face[last_index]].offset_index,
-                                              vect_object_offsets[face[last_index]].offset,
-                                              vect_object_offsets[face[last_index]].altitude,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[last_index]].offset_index,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[last_index]].offset,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[last_index]].altitude,
                                               false,
-                                              vect_object_offsets[face[first_index]].offset_index,
-                                              vect_object_offsets[face[first_index]].offset,
-                                              vect_object_offsets[face[first_index]].altitude,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[first_index]].offset_index,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[first_index]].offset,
+                                              map__object_id__offset_index__offset__offset_info[object_index][face[first_index]].altitude,
                                               false)
                                             );
                                           }
@@ -3963,13 +4042,13 @@ namespace CGAL {
                                           if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
                                             vect__edges.push_back(
                                               EDGE_INFO(
-                                                vect_object_offsets[start_index].offset_index,
-                                                vect_object_offsets[start_index].offset,
-                                                vect_object_offsets[start_index].altitude,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].offset_index,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].offset,
+                                                map__object_id__offset_index__offset__offset_info[object_index][start_index].altitude,
                                                 false,
-                                                vect_object_offsets[end_index].offset_index,
-                                                vect_object_offsets[end_index].offset,
-                                                vect_object_offsets[end_index].altitude,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].offset_index,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].offset,
+                                                map__object_id__offset_index__offset__offset_info[object_index][end_index].altitude,
                                                 false)
                                             );
                                           }
@@ -3982,18 +4061,18 @@ namespace CGAL {
                                   // Если данные по faces не были переданы (через сокет profile faces <image url="..\code_images\file_0090.png" scale=".3"/>), то соеденить контур по порядку переданных вершин (без замыкания):
                                   if (vect__faces__edges.size() == 0) {
                                     std::vector<EDGE_INFO> vect__edges;
-                                    for (int I = (int)vect_object_offsets.size() - 2; I >= 0; I--) {
+                                    for (int I = (int)vect__offset_index.size() - 2; I >= 0; I--) {
                                       int firts_index = I;
                                       int last_index = I + 1;
                                       vect__edges.push_back(
                                         EDGE_INFO(
-                                          vect_object_offsets[last_index].offset_index,
-                                          vect_object_offsets[last_index].offset,
-                                          vect_object_offsets[last_index].altitude,
+                                          map__object_id__offset_index__offset__offset_info[object_index][last_index].offset_index,
+                                          map__object_id__offset_index__offset__offset_info[object_index][last_index].offset,
+                                          map__object_id__offset_index__offset__offset_info[object_index][last_index].altitude,
                                           false,
-                                          vect_object_offsets[firts_index].offset_index,
-                                          vect_object_offsets[firts_index].offset,
-                                          vect_object_offsets[firts_index].altitude,
+                                          map__object_id__offset_index__offset__offset_info[object_index][firts_index].offset_index,
+                                          map__object_id__offset_index__offset__offset_info[object_index][firts_index].offset,
+                                          map__object_id__offset_index__offset__offset_info[object_index][firts_index].altitude,
                                           false
                                         )
                                       );
@@ -4006,16 +4085,33 @@ namespace CGAL {
                                   boost::asio::thread_pool pool1(threadNumbers);
                                   boost::mutex mtx_;
 
-                                  for (const auto& elem : map__ss_id__mesh_face_id__segment_contour) {
+                                  for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
+                                    int profile_face_index = I;
+                                    map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
+                                    auto& vect__edges = vect__faces__edges[I];
+                                    if (vect__edges.size() >= 2) {
+                                      for (const auto& elem : map__ss_id__mesh_face_id__segment_contour) {
+                                        // Без этого преобразования возникают проблемы с передачей параметров в многопоточность в clang.
+                                        auto& ss_id = elem.first;
+                                        auto& pfi_face_info = map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index];
+                                        if (pfi_face_info.find(ss_id) == pfi_face_info.end()) {
+                                          pfi_face_info[ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                        }
+                                      }
+                                    }
+                                  }
+
+                                  for (const auto& [_ss_id, _map__mesh_face_id__segment_points] : map__ss_id__mesh_face_id__segment_contour) {
                                     // Без этого преобразования возникают проблемы с передачей параметров в многопоточность в clang.
-                                    auto& ss_id = elem.first;
-                                    auto& map__mesh_face_id__segment_points = elem.second;
+                                    auto& ss_id = _ss_id;
+                                    auto& map__mesh_face_id__segment_points = _map__mesh_face_id__segment_points;
                                     auto& _object_index = object_index;
+
                                     boost::asio::post(pool1, [
                                          ss_id,
+                                        &map__object_id__offset_index__offset__offset_info,
                                         &map__profile_face_index__ss_id__mesh_face_id__faces_info,
                                         &map__mesh_face_id__segment_points,
-                                        &vect_object_offsets,
                                         &vect__faces__edges,
                                         &calc_points,
                                         verbose,
@@ -4031,15 +4127,18 @@ namespace CGAL {
                                             for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
                                               int profile_face_index = I;
                                               auto& vect__edges = vect__faces__edges[I];
+
                                               if (vect__edges.size() >= 2) {
-                                                mtx_.lock();
-                                                if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
-                                                  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
-                                                }
-                                                if (map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].find(ss_id) == map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].end()) {
-                                                  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
-                                                }
-                                                mtx_.unlock();
+
+                                                //mtx_.lock();
+                                                //if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
+                                                //  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
+                                                //}
+                                                //if (map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].find(ss_id) == map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].end()) {
+                                                //  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                                //}
+                                                //mtx_.unlock();
+
                                                 for (auto& [mesh_face_id, vect_segment_points] : map__mesh_face_id__segment_points) {
                                                   // Считать только если есть минимум пара offset
                                                   // TODO - в будущем учесть, что высоты могут быть одинаковыми и caps-ы могут перекрыться. Пока это не учитывается.
@@ -4061,22 +4160,22 @@ namespace CGAL {
 
                                                   for (auto& edge_info : vect__edges) {
                                                     auto& _oioa0_offset_index = edge_info.oioa0_offset_index;
-                                                    auto& _oioa0_offset = edge_info.oioa0_offset;
-                                                    auto& _oioa0_altitude = edge_info.oioa0_altitude;
+                                                    auto& _oioa0_offset       = edge_info.oioa0_offset;
+                                                    auto& _oioa0_altitude     = edge_info.oioa0_altitude;
                                                     auto& _oioa1_offset_index = edge_info.oioa1_offset_index;
-                                                    auto& _oioa1_offset = edge_info.oioa1_offset;
-                                                    auto& _oioa1_altitude = edge_info.oioa1_altitude;
+                                                    auto& _oioa1_offset       = edge_info.oioa1_offset;
+                                                    auto& _oioa1_altitude     = edge_info.oioa1_altitude;
 
                                                     // Сначала определить какой сегмент по абсолютному значению ближе к линии 0-0?
                                                     //mtx_.lock();
-                                                    auto& elem0 = vect_object_offsets[_oioa0_offset_index];
-                                                    auto& elem1 = vect_object_offsets[_oioa1_offset_index];
-                                                    auto  elem0_offset = elem0.offset;
-                                                    auto  elem0_offset_index = elem0.offset_index;
-                                                    auto  elem0_altitude = elem0.altitude;
-                                                    auto  elem1_offset = elem1.offset;
-                                                    auto  elem1_offset_index = elem1.offset_index;
-                                                    auto  elem1_altitude = elem1.altitude;
+                                                    auto& elem0               = map__object_id__offset_index__offset__offset_info[_object_index][_oioa0_offset_index];
+                                                    auto& elem1               = map__object_id__offset_index__offset__offset_info[_object_index][_oioa1_offset_index];
+                                                    auto  elem0_offset        = elem0.offset; // elem0.offset;
+                                                    auto  elem0_offset_index  = elem0.offset_index; // elem0.offset_index;
+                                                    auto  elem0_altitude      = elem0.altitude; // elem0.altitude;
+                                                    auto  elem1_offset        = elem1.offset; // elem1.offset;
+                                                    auto  elem1_offset_index  = elem1.offset_index; // elem1.offset_index;
+                                                    auto  elem1_altitude      = elem1.altitude; // elem1.altitude;
                                                     //mtx_.unlock();
 
                                                     // Подсчёт faces всегда выполняется против часовой стрелки от первой точки после старта.
@@ -4223,6 +4322,8 @@ namespace CGAL {
                                                   map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id][mesh_face_id] = vect_faces;
                                                   mtx_.unlock();
                                                 }
+                                              } else {
+                                                // vect__edges.size() >= 2
                                               }
                                             }
                                           }
@@ -4459,7 +4560,7 @@ namespace CGAL {
                         if (map_join_mesh.find(split_object_index) == map_join_mesh.end()) {
                           map_join_mesh[split_object_index] = std::vector<OIOA_OFFSET_SS_PARAMS>();
                         }
-                        OIOA_OFFSET_SS_PARAMS offset_info(OIOA(split_object_index, 0, 0.0, 0.0), std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
+                        OIOA_OFFSET_SS_PARAMS offset_info( OIOA(split_object_index, 0.0, OIOA::NEGATIVE_TYPE::UNDEFINED), 0.0, 0, 0.0, std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
                         offset_info.mesh_ss_02_merged = mesh;
                         map_join_mesh[split_object_index].push_back(offset_info);
                         split_object_index++;
@@ -4472,7 +4573,7 @@ namespace CGAL {
                         mesh_joined.join(mesh);
                       }
                       map_join_mesh[keep_object_index] = std::vector<OIOA_OFFSET_SS_PARAMS>();
-                      OIOA_OFFSET_SS_PARAMS offset_info(OIOA(keep_object_index, 0, 0.0, 0.0), std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
+                      OIOA_OFFSET_SS_PARAMS offset_info(OIOA(keep_object_index, 0.0, OIOA::NEGATIVE_TYPE::UNDEFINED), 0.0, 0, 0.0, std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
                       offset_info.mesh_ss_02_merged = mesh_joined;
                       map_join_mesh[keep_object_index].push_back(offset_info);
                     } else if (results_join_mode == 2) {
@@ -4486,8 +4587,8 @@ namespace CGAL {
                   if (results_join_mode == 2) {
 
                     Mesh mesh_merged_all_objects; // При join_mode==MERGE выполнить join всех mesh
-                    OIOA oioa1(merge_object_index, 0, 0.0, 0.0);
-                    OIOA_OFFSET_SS_PARAMS offset_info(oioa1, std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
+                    OIOA oioa1(merge_object_index, 0.0);
+                    OIOA_OFFSET_SS_PARAMS offset_info(oioa1, 0.0, 0, 0.0, std::vector<Polygon_with_holes_2>(), std::vector<SS__HalfEdge__Point_2>());
                     // Параметры для получения результатов merge:
                     std::vector<Point_3>                  result_ss_mesh_merged_points;
                     std::vector<std::vector<std::size_t>> result_ss_mesh_merged_polygons;
@@ -4536,7 +4637,7 @@ namespace CGAL {
 
                   std::set<int> set_object1_offsets_indexes; // Индексы offset из которых получился mesh для этого объекта
                   for (auto& pwhs_offset_index_order1 : vect_pwhs_with_offset_index) {
-                    set_object1_offsets_indexes.insert(pwhs_offset_index_order1.oioa1.offset_index);
+                    set_object1_offsets_indexes.insert(pwhs_offset_index_order1.offset_index);
                   }
 
                   //  Рассчитать результат уже независимо от join_mode:
@@ -4548,7 +4649,7 @@ namespace CGAL {
                     for (auto& pwh_altitude : vect_pwhs_with_offset_index) {
                       for (auto& pwh1 : pwh_altitude.vect_pwh) {
                         Mesh sm1;
-                        ConvertPolygonWithHoles2IntoMesh(pwh1, pwh_altitude.oioa1.altitude, sm1);
+                        ConvertPolygonWithHoles2IntoMesh(pwh1, pwh_altitude.altitude, sm1);
                         vect_sm_offset_index_order.push_back(sm1);
                       }
                     }
