@@ -3,12 +3,14 @@ import numpy as np
 import sys
 import traceback
 import itertools
+from time import time
 
 #print("== pySVCGAL.py start =================================================")
 
 from pySVCGAL.clib import load_library
 SVCGAL_clib = load_library.load_library()
 
+# Результаты рассчёта в виде Mesh
 class MESH_DATA2(ctypes.Structure):
     _fields_ = [
         ("has_error", ctypes.c_bool, ),
@@ -24,9 +26,11 @@ class MESH_DATA2(ctypes.Structure):
         ("nn_verts", ctypes.POINTER( (ctypes.c_int)), ),
         ("nn_edges", ctypes.POINTER( (ctypes.c_int)), ),
         ("nn_faces", ctypes.POINTER( (ctypes.c_int)), ),
-        ("vertices", ctypes.POINTER( (ctypes.c_float)*3), ),
-        ("edges"   , ctypes.POINTER( (ctypes.c_int)*2), ),
-        ("faces"   , ctypes.POINTER( (ctypes.c_int)*3), ),
+        ("nn_faces_indexes_counters", ctypes.POINTER( (ctypes.c_int)), ), # Счётчик индексов вершин для faces (количество счётчиков равно количеству nn_faces). Этот параметр появился, потому что количество вершин в faces стало переменным.
+        ("vertices", ctypes.POINTER( (ctypes.c_float)*3), ), # Координаты вершин - тройной float
+        ("edges"   , ctypes.POINTER( (ctypes.c_int)*2), ), # Индексы рёбер (всегда по 2)
+        ("faces"   , ctypes.POINTER( (ctypes.c_int)  ), ), # Индексы вершин в гранях
+        #("faces"   , ctypes.POINTER( (ctypes.c_int)*3), ),
 
         ("nn_source_objects_count"   , ctypes.c_int                          ), # Количество исходных объектов для чтения и выдачи информации по ошибкам по исходных объектам. Количество результирующих mesh может отличаться от исходных объектов по параметру results_join_mode
         ("nn_source_objects_indexes" , ctypes.POINTER( (ctypes.c_int   )  ), ), # индексы исходных объектов
@@ -42,6 +46,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     """
     Documentation
     """   
+    time01 = time()
 
     # https://docs.python.org/3/library/ctypes.html
     straight_skeleton_2d_offset = SVCGAL_clib.straight_skeleton_2d_offset
@@ -52,6 +57,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.POINTER((ctypes.c_float) ),  # in_offsets 
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_altitudes (chained)
         ctypes.POINTER((ctypes.c_float) ),  # in_altitudes (chained)
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__counters
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__indexes_counters
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__close_mode
+        ctypes.POINTER((ctypes.c_int  ) ),  # in__profile_faces__indexes_array - (array)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_planes (chained)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_contours_in_planes (chained)
 
@@ -63,6 +72,8 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.c_int,                       # source_objects_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_int,                       # results_join_mode 0 - split, 1 - keep, 2 - merge all meshes
         ctypes.c_bool,                      # verbose (additional info output to a console)
+        ctypes.c_bool,                      # use_cache_of_straight_skeleton
+        ctypes.c_bool,                      # bevel_more_split - if negative offset or several contours in source shape
     ]
     straight_skeleton_2d_offset.restype = ctypes.POINTER(MESH_DATA2)
 
@@ -71,26 +82,41 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         ctypes.POINTER(MESH_DATA2)
     ]
 
-    force_z_zero                = data['force_z_zero']
-    res_type                    = data['res_type']
-    only_tests_for_valid        = data['only_tests_for_valid']
-    source_objects_join_mode    = data['source_objects_join_mode']
-    results_join_mode           = data['results_join_mode']
-    verbose                     = data['verbose']
+    force_z_zero                   = data['force_z_zero']
+    res_type                       = data['res_type']
+    only_tests_for_valid           = data['only_tests_for_valid']
+    source_objects_join_mode       = data['source_objects_join_mode']
+    results_join_mode              = data['results_join_mode']
+    verbose                        = data['verbose']
+    use_cache_of_straight_skeleton = data['use_cache_of_straight_skeleton']
+    bevel_more_split               = data['bevel_more_split']
 
     offsets_counters                = []
     offsets_array                   = []
     altitudes_array                 = []
-    planes_in_object                = []   # Сколько в Объекте planes [1-элемент на объект]
+    profile_faces__counters         = [] # Счётчик количества faces на один объект (количество этого параметра равно количеству объектов)
+    profile_faces__indexes_counters = [] # Счётчик количества индексов у каждого face
+    profile_faces__indexes_array    = [] # Индексы каждого face
+    profile_faces__close_modes_array = [] # режим открытия/закрытия каждого профильного face (0-закрыто, 1-открыто)
+    planes_in_object                = [] # Сколько в Объекте planes [1-элемент на объект]
     contours_in_planes_counter      = [] # Сколько в каждом плане контуров
     vertices_in_contour_counters    = []
     vertices_list                   = []
-    shapes_mode                     = [] # КОличество соответствует количеству объектов
+    shapes_mode                     = [] # Количество соответствует количеству объектов
 
     for I, object1 in enumerate(data['objects']):
         offsets_counters.append(len(object1['offsets']))
         offsets_array   .extend(object1['offsets'])
-        altitudes_array.extend(object1['altitudes'])
+        altitudes_array .extend(object1['altitudes'])
+
+        # Собрать данные по faces, из которых состоит профиль для SS
+        profile_faces__counters.append(len(object1['profile_faces__indexes']))
+        for face1 in object1['profile_faces__indexes']:
+            profile_faces__indexes_counters.append(len(face1))
+            profile_faces__indexes_array.extend(face1)
+            pass
+        profile_faces__close_modes = object1['profile_faces__close_modes']
+        profile_faces__close_modes_array.extend(profile_faces__close_modes)
         planes_in_object.append(len(object1['planes'])) # количество планов текущего объекта
         for plane1 in object1['planes']:
             contours_in_planes_counter.append(len(plane1)) # Количество контуров по каждому плану
@@ -103,16 +129,20 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     pass
 
     params = [
-        len(data['objects']),           #in_count_of_objects
-        shapes_mode,                    # 0-ORIGINAL_BOUNDARIES, 1-EXCLUDE_HOLES, 2-INVERT_HOLES
-        offsets_counters,               # in_count_of_offsets - array (len is count of objects)
+        len(data['objects']),            #in_count_of_objects
+        shapes_mode,                     # 0-ORIGINAL_BOUNDARIES, 1-EXCLUDE_HOLES, 2-INVERT_HOLES
+        offsets_counters,                # in_count_of_offsets - array (len is count of objects)
         offsets_array,
-        offsets_counters,               # in_count_of_altitudes - array (len is count of objects)
-        altitudes_array,                # in_altitudes
-        planes_in_object,               # in_count_of_planes
-        contours_in_planes_counter,     # in_contours_in_planes
-        vertices_in_contour_counters,   # in_vertices_in_contours
-        vertices_list,                  # in_vertices
+        offsets_counters,                # in_count_of_altitudes - array (len is count of objects)
+        altitudes_array,                 # in_altitudes
+        profile_faces__counters,         # 
+        profile_faces__indexes_counters, # in_offset_edges
+        profile_faces__indexes_array,    #
+        profile_faces__close_modes_array, #
+        planes_in_object,                # in_count_of_planes
+        contours_in_planes_counter,      # in_contours_in_planes
+        vertices_in_contour_counters,    # in_vertices_in_contours
+        vertices_list,                   # in_vertices
         only_tests_for_valid,
         res_type,
         force_z_zero,
@@ -122,16 +152,25 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     ]
 
     # https://docs.python.org/3/library/ctypes.html
-    ctypes_in_count_of_objects     = len(data['objects'])
-    ctypes_in_shapes_mode          = ctypes.ARRAY( len(shapes_mode)                 ,  ctypes.c_int     )(*[(ctypes.c_int    )( s1) for s1 in shapes_mode ])
-    ctypes_in_count_of_offsets     = ctypes.ARRAY( len(offsets_counters)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offsets_counters ])
-    ctypes_in_offsets              = ctypes.ARRAY( len(offsets_array)               ,  ctypes.c_float   )(*[(ctypes.c_float  )( o1) for o1 in offsets_array    ])
-    ctypes_in_count_of_altitudes   = ctypes.ARRAY( len(offsets_counters)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offsets_counters ])
-    ctypes_in_altitudes            = ctypes.ARRAY( len(altitudes_array)             ,  ctypes.c_float   )(*[(ctypes.c_float  )( a1) for a1 in altitudes_array  ])
-    ctypes_in_count_of_planes      = ctypes.ARRAY( len(planes_in_object)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in planes_in_object ])
-    ctypes_in_contours_in_planes   = ctypes.ARRAY( len(contours_in_planes_counter)  ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in contours_in_planes_counter ])
-    ctypes_in_vertices_in_contours = ctypes.ARRAY( len(vertices_in_contour_counters),  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in vertices_in_contour_counters ])
-    ctypes_in_vertices             = ctypes.ARRAY( len(vertices_list)               ,  ctypes.c_float*3 )(*[(ctypes.c_float*3)(*v1) for v1 in vertices_list ])
+    ctypes_in_count_of_objects      = len(data['objects'])
+    ctypes_in_shapes_mode           = ctypes.ARRAY( len(shapes_mode)                 ,  ctypes.c_int     )(*[(ctypes.c_int    )( s1) for s1 in shapes_mode ])
+    ctypes_in_count_of_offsets      = ctypes.ARRAY( len(offsets_counters)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offsets_counters ])
+    ctypes_in_offsets               = ctypes.ARRAY( len(offsets_array)               ,  ctypes.c_float   )(*[(ctypes.c_float  )( o1) for o1 in offsets_array    ])
+    ctypes_in_count_of_altitudes    = ctypes.ARRAY( len(offsets_counters)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offsets_counters ])
+    ctypes_in_altitudes             = ctypes.ARRAY( len(altitudes_array)             ,  ctypes.c_float   )(*[(ctypes.c_float  )( a1) for a1 in altitudes_array  ])
+    
+    ctypes_in__profile_faces__counters              = ctypes.ARRAY( len(profile_faces__counters)         ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__counters ])
+    ctypes_in__profile_faces__indexes_counters      = ctypes.ARRAY( len(profile_faces__indexes_counters) ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__indexes_counters ])
+    ctypes_in__profile_faces__indexes_array         = ctypes.ARRAY( len(profile_faces__indexes_array)    ,  ctypes.c_int     )(*[(ctypes.c_int    )( f1) for f1 in profile_faces__indexes_array ])
+    ctypes_in__profile_faces__close_modes_array     = ctypes.ARRAY( len(profile_faces__close_modes_array),  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in profile_faces__close_modes_array ])
+    
+    #ctypes_in_count_of_offset_edges = ctypes.ARRAY( len(offset_edges_counters)       ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in offset_edges_counters ])
+    #ctypes_in_offset_edges          = ctypes.ARRAY( len(offset_edges_array)          ,  ctypes.c_int*2   )(*[(ctypes.c_int*2  )(*e1) for e1 in offset_edges_array  ])
+    
+    ctypes_in_count_of_planes       = ctypes.ARRAY( len(planes_in_object)            ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in planes_in_object ])
+    ctypes_in_contours_in_planes    = ctypes.ARRAY( len(contours_in_planes_counter)  ,  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in contours_in_planes_counter ])
+    ctypes_in_vertices_in_contours  = ctypes.ARRAY( len(vertices_in_contour_counters),  ctypes.c_int     )(*[(ctypes.c_int    )( c1) for c1 in vertices_in_contour_counters ])
+    ctypes_in_vertices              = ctypes.ARRAY( len(vertices_list)               ,  ctypes.c_float*3 )(*[(ctypes.c_float*3)(*v1) for v1 in vertices_list ])
     
     md = None
     new_mesh = {
@@ -142,6 +181,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         'faces'     : [],
     }
 
+    time01 = time()-time01
+    if verbose==True:
+        print(f'\nOffset Straight Skeleton. Prepare data from external call: {time01} ms')
+
     try:
         md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
@@ -150,6 +193,12 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             ctypes_in_offsets,
             ctypes_in_count_of_altitudes,
             ctypes_in_altitudes,
+            ctypes_in__profile_faces__counters,
+            ctypes_in__profile_faces__indexes_counters,
+            ctypes_in__profile_faces__indexes_array,
+            ctypes_in__profile_faces__close_modes_array,
+            #ctypes_in_count_of_offset_edges,
+            #ctypes_in_offset_edges,
             ctypes_in_count_of_planes,
             ctypes_in_contours_in_planes,
             ctypes_in_vertices_in_contours,
@@ -159,7 +208,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             force_z_zero,
             source_objects_join_mode,
             results_join_mode,
-            verbose
+            verbose,
+            use_cache_of_straight_skeleton,
+            bevel_more_split,
         )
         ################ Get Results ################
         mdc = md.contents
@@ -173,10 +224,12 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         new_edges    = []
         new_faces    = []
         
+        time01 = time()
         if mdc.nn_objects>0:
             verts_I0   = 0
             edges_I0   = 0
             faces_I0   = 0
+            faces_indexes_I0 = 0
             offsets_I0 = 0
 
             error_I0                        = 0
@@ -184,26 +237,46 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             nn_vertices_per_contour1_cursor = 0
             vertices_of_errors_cursor       = 0
             offsets_indexes_cursor          = 0
+
+            mdc_vertices = mdc.vertices
+            mdc_edges = mdc.edges
+            mdc_faces = mdc.faces
+            mdc_nn_faces = mdc.nn_faces
+            mdc_nn_faces_indexes_counters = mdc.nn_faces_indexes_counters
+
             for I in range(mdc.nn_objects):
                 object_index = mdc.nn_objects_indexes[I]
 
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
                 vertices_count = mdc.nn_verts[I]
-                new_vertices1 = [ tuple(mdc.vertices[verts_I0+i]) for i in range(vertices_count)]
+                new_vertices1 = [ tuple(mdc_vertices[verts_I0+i]) for i in range(vertices_count)]
                 verts_I0 += vertices_count
 
                 #### Extract New Edges ####
                 edges_count = mdc.nn_edges[I]
-                new_edges1 = [ tuple(mdc.edges[edges_I0+i]) for i in range(edges_count)]
+                new_edges1 = [ tuple(mdc_edges[edges_I0+i]) for i in range(edges_count)]
                 edges_I0 += edges_count
 
                 #### Extract New Faces #### 
-                faces_count = mdc.nn_faces[I]
-                new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                # extract face indexes counters:
+                faces_count = mdc_nn_faces[I]
+                faces_indexes_counters = [ mdc_nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
+                faces_indexes_pos = 0
+                new_faces1 = []
+                new_faces1_append = new_faces1.append
+                for counter in faces_indexes_counters:
+                    face1 = []
+                    face1_append = face1.append
+                    for i in range(counter):
+                        face1_append(mdc_faces[faces_indexes_I0+faces_indexes_pos])
+                        faces_indexes_pos+=1
+                        pass
+                    new_faces1_append(tuple(face1))
                 faces_I0 += faces_count
+                faces_indexes_I0 += faces_indexes_pos
 
-                #### Extract indexe of object
+                #### Extract indexes of object
                 offsets_counts = mdc.nn_offsets_counts[I]
                 offsets_indexes = [ mdc.nn_offsets_indexes[offsets_I0+i] for i in range(offsets_counts)]
                 offsets_I0 += offsets_counts
@@ -218,6 +291,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
                 pass
             pass
+
+        time01 = time()-time01
+        if verbose==True:
+            print(f'\nOffset Straight Skeleton. Load data from external call: {time01} ms')
 
         # Извлечь ошибки по исходным объектам
         if mdc.nn_source_objects_count>0:
@@ -302,6 +379,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         ctypes.POINTER((ctypes.c_double) ), # in_angles - Должны точно соответствовать параметрам контуров in_count_of_planes и in_contours_in_planes
         ctypes.POINTER((ctypes.c_int  ) ),  # in_count_of_planes (chained)
         ctypes.POINTER((ctypes.c_int  ) ),  # in_contours_in_planes (chained)
+
         ctypes.POINTER((ctypes.c_int  ) ),  # in_vertices_in_contours - count of vertices in contours (chained)
         ctypes.POINTER((ctypes.c_float)*3), # in_vertices - (array)
         ctypes.c_bool,                      # only_tests_for_valid
@@ -410,7 +488,7 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
         if(mdc.str_error is not None):
             str_error = mdc.str_error.decode("ascii")
 
-        # Собрать результаты
+        # Собрать результаты, чтобы хоть что-то показать пользователю.
         new_vertices = []
         new_edges    = []
         new_faces    = []
@@ -419,6 +497,8 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
             verts_I0   = 0
             edges_I0   = 0
             faces_I0    = 0
+            faces_indexes_I0 = 0
+            offsets_I0 = 0
 
             for I in range(mdc.nn_objects):
                 object_index = mdc.nn_objects_indexes[I]
@@ -434,9 +514,27 @@ def pySVCGAL_straight_skeleton_2d_extrude(data):
                 edges_I0 += edges_count
 
                 #### Extract New Faces #### 
+                # faces_count = mdc.nn_faces[I]
+                # new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                # faces_I0 += faces_count
+
+                #### Extract New Faces #### 
+                # extract face indexes counters:
                 faces_count = mdc.nn_faces[I]
-                new_faces1 = [ tuple(mdc.faces[faces_I0+i]) for i in range(faces_count)]
+                faces_indexes_counters = [ mdc.nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
+                faces_indexes_pos = 0
+                new_faces1 = []
+                for counter in faces_indexes_counters:
+                    face1 = []
+                    face1_append = face1.append
+                    for i in range(counter):
+                        face1_append(mdc.faces[faces_indexes_I0+faces_indexes_pos])
+                        faces_indexes_pos+=1
+                        pass
+                    new_faces1.append(tuple(face1))
                 faces_I0 += faces_count
+                faces_indexes_I0 += faces_indexes_pos
+
 
                 new_mesh['objects'].append({
                     'object_index'              : object_index,
