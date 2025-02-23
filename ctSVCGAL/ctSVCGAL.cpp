@@ -2449,7 +2449,7 @@ namespace CGAL {
                   pool4.join();
                   timer1.stop();
                   if (verbose == true) {
-                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                                 calc of offsets general time: % 10.5f", timer1.time());
+                    printf("\n " VAL2STR(Msg::_0047) ". SS 2D Offset.                                  calc of offsets general time: % 10.5f", timer1.time());
                   }
                 }
 
@@ -3348,7 +3348,7 @@ namespace CGAL {
                               /// <summary>
                               /// Список точек с индексами.
                               /// </summary>
-                              std::map<int /*point_index*/, SHAPE_POINT> map__point_index__calc_point;
+                              std::unordered_map<int /*point_index*/, SHAPE_POINT> map__point_index__calc_point; // Заменил на std::unordered_map, но это подняло производительность излечения элемента только в 2 раза.
 
                               /// <summary>
                               /// Внутренний счётчик точек при создании новых точек пересечения, которые уже точно пойдут в финальную фигуру.
@@ -3447,13 +3447,14 @@ namespace CGAL {
                               /// <summary>
                               /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
                               /// </summary>
-                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_index) {
+                              int get_index_or_append_vertex_application_counter(int point_index, int profile_face_index, int application_index, boost::mutex& mtx_) {
                                 // Получить проектную точку
                                 auto& ppoint = map__point_index__calc_point[point_index];
                                 // Проверить, имеется ли у неё указанное применение:
                                 const auto& ss_id__vertex_id = std::tuple(ppoint.ss_id, ppoint.vertex_id, profile_face_index, application_index);
-                                const auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 int res_counter = -1;
+                                //mtx_.lock();
+                                const auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 if (it == map__ss_id__vertex_id.end()) {
                                   // Добавить её в список результирующих точек
                                   res_counter = ss_intersects_he_points_counter++; // ++ не просто так стоит после, т.к. после "захвата" индекса надо сразу задать следующий индекс.
@@ -3489,6 +3490,7 @@ namespace CGAL {
                                   auto& [tpl, _res_counter] = (*it);
                                   res_counter = _res_counter;
                                 }
+                                //mtx_.unlock();
                                 return res_counter;
                               };
                             };
@@ -4001,16 +4003,35 @@ namespace CGAL {
                                     vect__faces__edges.push_back(vect__edges);
                                   }
 
+
+                                  for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
+                                    int profile_face_index = I;
+                                    map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
+                                    auto& vect__edges = vect__faces__edges[I];
+                                    if (vect__edges.size() >= 2) {
+                                      for (const auto& [ss_id, _] : map__ss_id__mesh_face_id__segment_contour) {
+                                        auto& pfi_face_info = map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index];
+                                        if (pfi_face_info.find(ss_id) == pfi_face_info.end()) {
+                                          pfi_face_info[ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                        }
+                                      }
+                                    }
+                                  }
+
                                   // <image url="..\code_images\file_0082.png" scale=".3"/> В некоторых случаях производительность поднимается очень хорошо.
                                   const int threadNumbers = boost::thread::hardware_concurrency();
                                   boost::asio::thread_pool pool1(threadNumbers);
                                   boost::mutex mtx_;
 
-                                  for (const auto& elem : map__ss_id__mesh_face_id__segment_contour) {
+                                  for (const auto& [_ss_id, _map__mesh_face_id__segment_points] : map__ss_id__mesh_face_id__segment_contour) {
                                     // Без этого преобразования возникают проблемы с передачей параметров в многопоточность в clang.
-                                    auto& ss_id = elem.first;
-                                    auto& map__mesh_face_id__segment_points = elem.second;
+                                    auto& ss_id = _ss_id;;
+                                    auto& map__mesh_face_id__segment_points = _map__mesh_face_id__segment_points;
                                     auto& _object_index = object_index;
+
+                                    // Рассчёт одного SS (известно его ss_id). TODO: в случае, когда имеется отрицательный SS, то он очень сильно перетягивает на себя загрузку, потому что
+                                    // часто отрицательный SS остаётся единственным, обрабатываемым SS (или их мало в любом случае), т.к. является внешним. Бывает, что к нему подключаются и другие отрицательные SS, 
+                                    // Но такое распараллеливание не сильно повышает производительность. // <image url="..\code_images\file_0092.png" scale=".2"/>
                                     boost::asio::post(pool1, [
                                          ss_id,
                                         &map__profile_face_index__ss_id__mesh_face_id__faces_info,
@@ -4022,7 +4043,6 @@ namespace CGAL {
                                        _object_index,
                                         &mtx_
                                     ] {
-
                                         // Таймер для определения времени рассчёта одного потока.
                                         CGAL::Real_timer timer1;
                                         timer1.start();
@@ -4032,14 +4052,15 @@ namespace CGAL {
                                               int profile_face_index = I;
                                               auto& vect__edges = vect__faces__edges[I];
                                               if (vect__edges.size() >= 2) {
-                                                mtx_.lock();
-                                                if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
-                                                  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
-                                                }
-                                                if (map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].find(ss_id) == map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].end()) {
-                                                  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
-                                                }
-                                                mtx_.unlock();
+                                                //mtx_.lock();
+                                                //if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
+                                                //  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
+                                                //}
+                                                //if (map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].find(ss_id) == map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index].end()) {
+                                                //  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index][ss_id] = std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>();
+                                                //}
+                                                //mtx_.unlock();
+
                                                 for (auto& [mesh_face_id, vect_segment_points] : map__mesh_face_id__segment_points) {
                                                   // Считать только если есть минимум пара offset
                                                   // TODO - в будущем учесть, что высоты могут быть одинаковыми и caps-ы могут перекрыться. Пока это не учитывается.
@@ -4060,23 +4081,24 @@ namespace CGAL {
                                                   std::map<int, int> map__point_index__counter;
 
                                                   for (auto& edge_info : vect__edges) {
+
                                                     auto& _oioa0_offset_index = edge_info.oioa0_offset_index;
-                                                    auto& _oioa0_offset = edge_info.oioa0_offset;
-                                                    auto& _oioa0_altitude = edge_info.oioa0_altitude;
+                                                    auto& _oioa0_offset       = edge_info.oioa0_offset;
+                                                    auto& _oioa0_altitude     = edge_info.oioa0_altitude;
                                                     auto& _oioa1_offset_index = edge_info.oioa1_offset_index;
-                                                    auto& _oioa1_offset = edge_info.oioa1_offset;
-                                                    auto& _oioa1_altitude = edge_info.oioa1_altitude;
+                                                    auto& _oioa1_offset       = edge_info.oioa1_offset;
+                                                    auto& _oioa1_altitude     = edge_info.oioa1_altitude;
 
                                                     // Сначала определить какой сегмент по абсолютному значению ближе к линии 0-0?
                                                     //mtx_.lock();
-                                                    auto& elem0 = vect_object_offsets[_oioa0_offset_index];
-                                                    auto& elem1 = vect_object_offsets[_oioa1_offset_index];
-                                                    auto  elem0_offset = elem0.offset;
-                                                    auto  elem0_offset_index = elem0.offset_index;
-                                                    auto  elem0_altitude = elem0.altitude;
-                                                    auto  elem1_offset = elem1.offset;
-                                                    auto  elem1_offset_index = elem1.offset_index;
-                                                    auto  elem1_altitude = elem1.altitude;
+                                                    auto& elem0               = vect_object_offsets[_oioa0_offset_index];
+                                                    auto& elem1               = vect_object_offsets[_oioa1_offset_index];
+                                                    auto  elem0_offset        = elem0.offset;
+                                                    auto  elem0_offset_index  = elem0.offset_index;
+                                                    auto  elem0_altitude      = elem0.altitude;
+                                                    auto  elem1_offset        = elem1.offset;
+                                                    auto  elem1_offset_index  = elem1.offset_index;
+                                                    auto  elem1_altitude      = elem1.altitude;
                                                     //mtx_.unlock();
 
                                                     // Подсчёт faces всегда выполняется против часовой стрелки от первой точки после старта.
@@ -4160,6 +4182,9 @@ namespace CGAL {
 
                                                     for (auto& contour_point : vect_segment_points) {
 
+                                                      //CGAL::Real_timer timer7;
+                                                      //timer7.start();
+
                                                       mtx_.lock();
                                                       // Только что узнал, что std::map не является потокобезопасным не только на запись, но и на чтение.
                                                       // Поэтому все операции чтения/записи при многопоточной работе надо оборачивать mutex-ом.
@@ -4167,18 +4192,24 @@ namespace CGAL {
                                                       // Этот map используется и при рассчёте/получении нового индекса для проектных точек. Оказалось, что иногда идёт попытка чтения в момент добавления
                                                       // объекта в этот map из другого потока! А один раз даже возникла блокировка и blender повис. Хорошо ещё догадался войти отладчиком, а не сбросить
                                                       // blender. Самое обидное - очень редко вылезает. Много тестов прошло без проблем!
+                                                      // Update. Более того, обнаружилось, что операция чтения идёт очень медленно! И именно она занимает больше всего времени - даже больше,
+                                                      // чем время рассчёта! Заменил на std::unordered_map, но это подняло производительность излечения элемента только в 2 раза.
                                                       auto& calc_point = calc_points.map__point_index__calc_point[contour_point.point_index];
                                                       mtx_.unlock();
+                                                      //timer7.stop();
+                                                      //get_points7 += timer7.time();
 
                                                       if (contour_point.type == SHAPE_POINT::POINT_TYPE::PROJECT_POINT) {
                                                         if (cursor.do_collect_points == true) {
                                                           // TODO: Надо подумать, как избежать такого артифакта при shade_smooth <image url="..\code_images\file_0083.png" scale=".5"/>. Это происходит из-за попадания 0-й точки в отрезок.
 
                                                           // Определить индекс для точки типа PROJECT_POINT на основе перекрытия. Если такой точки нет, то создать её и вернуть её индекс.
+                                                          CGAL::Real_timer timer2;
+                                                          timer2.start();
                                                           mtx_.lock();
                                                           int application_index = ++map__point_index__counter[calc_point.index]; // Используется свойство map, что если элемента в map ещё не было с этим ключём, то по умолчанию в int создаётся 0.
                                                           // Оставлю для истории, какая ошибка появилась в алгоритме с появлением profile_face_index: <image url="..\code_images\file_0085.png" scale=".1"/>
-                                                          int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_index);
+                                                          int point_index = calc_points.get_index_or_append_vertex_application_counter(calc_point.index, profile_face_index, application_index, mtx_);
                                                           mtx_.unlock();
                                                           vect_faces.back().face_verts_indexes.push_back(point_index);
                                                         }
@@ -4192,30 +4223,21 @@ namespace CGAL {
                                                         }
                                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                                         cursor.do_collect_points = true;
-                                                        continue;
-                                                      }
-                                                      if (calc_point.oioa_offset_index == cursor.offset_index0 && contour_point.type != cursor.offset_type0) {
+                                                      }else if (calc_point.oioa_offset_index == cursor.offset_index0 && contour_point.type != cursor.offset_type0) {
                                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                                         cursor.do_collect_points = false;
-                                                        continue;
-                                                      }
-
-                                                      if (calc_point.oioa_offset_index == cursor.offset_index1 && contour_point.type == cursor.offset_type1) {
+                                                      }else if (calc_point.oioa_offset_index == cursor.offset_index1 && contour_point.type == cursor.offset_type1) {
                                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                                         cursor.do_collect_points = true;
-                                                        continue;
-                                                      }
-
-                                                      if (calc_point.oioa_offset_index == cursor.offset_index1 && contour_point.type != cursor.offset_type1) {
+                                                      }else if (calc_point.oioa_offset_index == cursor.offset_index1 && contour_point.type != cursor.offset_type1) {
                                                         vect_faces.back().face_verts_indexes.push_back(calc_point.index);
                                                         cursor.do_collect_points = false;
-                                                        continue;
                                                       }
                                                     }
                                                   }
                                                   // Проверить vect_faces. Если там были faces с признаком reverse, то инвертировать порядок индексов:
                                                   for (auto& face_info : vect_faces) {
-                                                    if (face_info.do_reverse == false) {
+                                                    if (face_info.do_reverse == false /*Так получилось эмпирически)))*/) {
                                                       std::reverse(face_info.face_verts_indexes.begin(), face_info.face_verts_indexes.end());
                                                     }
                                                   }
@@ -5423,7 +5445,6 @@ namespace CGAL {
 
                 CGAL::Real_timer timer2;
                 timer2.start();
-
                 ConvertMeshesIntoVerticesEdgesFaces(KV.second, vect_object1_verts, vect_object1_edges, vect_object1_faces);
                 timer2.stop();
                 if (verbose) {
