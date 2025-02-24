@@ -3450,9 +3450,25 @@ namespace CGAL {
                                   // res_counter = ss_ppoints_counter--;
                                   
                                   // Если точка не найдена, то создать её с новым индексом
-                                  SHAPE_POINT& project_point = SHAPE_POINT(-1/*индекс ещё не известен*/, -1 /* project_point_index - изначально она ни на кого не ссылается */, point_type, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, is_border, ss_id, ss_sign, vertex_id, application_index, _event_time);
+                                  SHAPE_POINT& project_point =
+                                    SHAPE_POINT(
+                                      -1/*индекс ещё не известен*/,
+                                      -1 /* project_point_index - изначально она ни на кого не ссылается */,
+                                      point_type,
+                                      _point,
+                                      _is_altitude_calc,
+                                      _oioa_offset,
+                                      _oioa_offset_index,
+                                      _oioa_altitude,
+                                      is_border,
+                                      ss_id,
+                                      ss_sign,
+                                      vertex_id,
+                                      application_index,
+                                      _event_time
+                                    );
                                   vect__point_index__project_point.push_back(project_point);
-                                  res_counter = -vect__point_index__project_point.size() /*1. Индексы проектных точек отрицательные (<0), 2. поэтому что самый первый индекс project_point должен быть -1, затем -2, -3 и т.д. Диапазон индексов mesh_point (отрицательные индексы) и project_point (положительные индексы) должен быть неразрывным и непересекающимся*/;
+                                  res_counter = -vect__point_index__project_point.size() /*1. Индексы проектных точек отрицательные (<0), 2. поэтому самый первый индекс project_point должен быть -1, затем -2, -3 и т.д. Диапазон индексов mesh_point (отрицательные индексы) и project_point (положительные индексы) должен быть неразрывным и непересекающимся*/;
                                   vect__point_index__project_point.back().index =
                                     map__ss_id__vertex_id[ss_id__vertex_id] =
                                     res_counter;
@@ -3466,7 +3482,7 @@ namespace CGAL {
                               /// <summary>
                               /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
                               /// </summary>
-                              int get_index_or_append__project_point__vertex__application_counter(int point_index, int profile_face_index, int application_index, boost::mutex& mtx_) {
+                              int get_index_or_append__project_point__vertex__application_counter(int point_index, int profile_face_index, int application_index /*, boost::mutex& mtx_*/) {
                                 // Получить проектную точку
                                 //auto& ppoint = map__point_index__calc_point[point_index];
                                 auto& project_point = vect__point_index__project_point[-(point_index+1 /*индексы для проектных точек отрицательные и всегда начинаеются с -1, поэтому, чтобы попасть в 0, нужно прибавлять 1 */ )];
@@ -3543,7 +3559,7 @@ namespace CGAL {
                             // Эмпирическая величина. Попытка заранее предсказать количество точек в mesh, чтобы дополнительное выделение память под std::vector для точек mesh по возможности не происходило.
                             // По идее достаточно трудно предсказать количество точек в результирующем mesh и вполне возможна ситуация, когда этого не хватит. Ну, что ж. Значит std::vector
                             // пусть сам разбирается с этой ситуацией (TODO: может удасться в итоге предсказать предположительное количество точек? Надо подумать при случае, чтобы не выделать слишком много памяти.)
-                            size_t size_calc_points = (intersections_points_size) * 2;
+                            size_t size_calc_points = (intersections_points_size); // *2; - агрессивный захват памяти. - update: не заметил разницы во времени со значением, когда нет увеличения количества на 2.
                             // Список точек BEVELED SS, образующихся в результате рассчётов сегментов.
                             // Примечание: Beveled SS строится на базе нескольких faces от профиля, поэтому тут находятся точки в сумме от всего рассчёта. Деление на группы по этим faces будет позже.
                             SHAPE_POINTS calc_points(size_calc_points, size_project_points*2);
@@ -3577,6 +3593,23 @@ namespace CGAL {
                             std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector<MeshFacePropertyStruct>>>              map__ss_id__mesh_face_id__segment_faces; // Рассчитать segment_faces
                             std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector<CONTOUR_SHAPE_POINT>>>                 map__ss_id__mesh_face_id__segment_contour; // Преобразовать один сегмент, состоящего из одного или двух faces (если есть отрицательные SS, то их точно будет 2 faces,а если есть только положительные SS, то один face)) в набор точек segment_contour
                             std::map<int /*индекс face профиля (порядковый номер)*/, std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>> map__profile_face_index__ss_id__mesh_face_id__faces_info; // Состав одного сегмента (сразу привязывается к mesh_face_id), распределённый по входным элементам геометрии профиля (в основном по faces профиля. В профиле несколько faces и других элементов).
+
+
+                            // Отложенные проектные точки, которые надо рассчитать для mesh
+                            struct PROJECT_POINT__APPLICATION_COUNTER {
+                              int project_point /*Уникальный в пределах всего объекта*/;
+                              int application_counter;
+                              int profile_face_index; // индекс face_index профиля
+                              PROJECT_POINT__APPLICATION_COUNTER(int _project_point, int _profile_face_index, int _application_counter)
+                                :project_point(_project_point), profile_face_index(_profile_face_index), application_counter(_application_counter) {
+
+                              }
+                            };
+                            // Временное хранилище проектных точек во время рассчёта точек сегмента, чтобы не вызывать mutex каждый раз при чтении любой точки сегмента,
+                            // что ужасно понижает производительность с учётом того, что проектные точки попадаются реже точек пересечения (есть исключения, но,
+                            // скорее это редкость, чем правило, к тому же это исключение только для частоты встречь таких случаев, а не что это приведёт к замедлению
+                            // рассчёта - не приведёт)
+                            std::vector<PROJECT_POINT__APPLICATION_COUNTER> vect__stack__project_points;
 
                             {
                               {
@@ -3780,7 +3813,7 @@ namespace CGAL {
                                                 Point_3 p3(hds_h->vertex()->point().x(), hds_h->vertex()->point().y(), 0 /*Z не выставляется (это altitude), будет считаться позже*/);
                                                 SHAPE_POINT::POINT_TYPE pt = SHAPE_POINT::POINT_TYPE::PROJECT_POINT;
                                                 int point_index = calc_points.get_index_or_append_vertex_id(
-                                                  segment_faces_I.ss_id,
+                                                  segment_faces_I.ss_id, // Не всегда соответствует ss_id.
                                                   segment_faces_I.ss_sign,
                                                   he_vertex_id,
                                                   pt,
@@ -3833,6 +3866,8 @@ namespace CGAL {
                                 if (verbose) {
                                   printf("\n " VAL2STR(Msg::_0076) ". SS 2D Offset. calc faces of segments. ------------------------------------------------");
                                 }
+                                // Сколько раз проектные точки преобразовывались в точки mesh?
+                                int project_point__to__mesh__counter = 0;
                                 {
 
                                   // Параметры курсора для обхода точек
@@ -4071,6 +4106,7 @@ namespace CGAL {
                                   const int threadNumbers = boost::thread::hardware_concurrency();
                                   boost::asio::thread_pool pool1(threadNumbers);
                                   boost::mutex mtx_;
+                                  
 
                                   for (const auto& [_ss_id, _map__mesh_face_id__segment_points] : map__ss_id__mesh_face_id__segment_contour) {
                                     // Без этого преобразования возникают проблемы с передачей параметров в многопоточность в clang.
@@ -4090,6 +4126,8 @@ namespace CGAL {
                                         &calc_points,
                                         verbose,
                                        _object_index,
+                                        &vect__stack__project_points,
+                                        &project_point__to__mesh__counter,
                                         &mtx_
                                     ] {
                                         // Таймер для определения времени рассчёта одного потока.
@@ -4124,6 +4162,7 @@ namespace CGAL {
                                                   ////vect_edges.push_back(EDGE_INFO(vect_oioa[0].offset_index, vect_oioa[0].offset_index, false, 0, 0.0, true)); // Последний индекс будет с caps-ом - update - пока пропускаю
 
                                                   std::vector<FACE_INFO> vect_faces /*список faces на текущем сегменте*/; // = std::vector/*faces*/<FACE_INFO>();
+                                                  std::vector<PROJECT_POINT__APPLICATION_COUNTER> _vect__stack__project_points; // Тоже самое, только в пределах одного потока. Потом пересчитать индексы faces для глобального параметра vect__stack__project_points 
 
                                                   // Счётчик сколько раз встретилась проектная точка при рассчёте этого face.
                                                   // Такой подход использует симметричность получения параметра map__point_index__counter[calc_point.index. Этот параметр при
@@ -4131,20 +4170,6 @@ namespace CGAL {
                                                   // во всех смежных faces в этой точке.
                                                   // TODO: Сделать рисунок или анимацию.
                                                   std::map<int, int> map__point_index__counter;
-
-                                                  struct PROJECT_POINT__APPLICATION_COUNTER {
-                                                    int project_point;
-                                                    int application_counter;
-                                                    PROJECT_POINT__APPLICATION_COUNTER(int _project_point, int _application_counter)
-                                                      :project_point(_project_point), application_counter(_application_counter) {
-
-                                                    }
-                                                  };
-                                                  // Временное хранилище проектных точек во время рассчёта точек сегмента, чтобы не вызывать mutex каждый раз при чтении любой точки сегмента,
-                                                  // что ужасно понижает производительность с учётом того, что проектные точки попадаются реже точек пересечения (есть исключения, но,
-                                                  // скорее это редкость, чем правило, к тому же это исключение только для частоты встречь таких случаев, а не что это приведёт к замедлению
-                                                  // рассчёта - не приведёт)
-                                                  std::vector<PROJECT_POINT__APPLICATION_COUNTER> vect__stack__project_points;
 
                                                   for (auto& edge_info : vect__edges) {
 
@@ -4273,13 +4298,13 @@ namespace CGAL {
 
                                                           // Определить индекс для точки типа PROJECT_POINT на основе перекрытия. Если такой точки нет, то создать её и вернуть её индекс.
                                                           int application_index = ++map__point_index__counter[calc_point.index]; // Используется свойство map, что если элемента в map ещё не было с этим ключём, то по умолчанию в int создаётся 0.
-                                                          vect__stack__project_points.push_back(PROJECT_POINT__APPLICATION_COUNTER(contour_point.point_index, application_index));
+                                                          _vect__stack__project_points.push_back(PROJECT_POINT__APPLICATION_COUNTER(contour_point.point_index, profile_face_index, application_index));
                                                           //mtx_.lock();
                                                           // Оставлю для истории, какая ошибка появилась в алгоритме с появлением profile_face_index: <image url="..\code_images\file_0085.png" scale=".1"/>
                                                           //int point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(calc_point.index, profile_face_index, application_index, mtx_);
                                                           //mtx_.unlock();
                                                           //vect_faces.back().face_verts_indexes.push_back(point_index);
-                                                          vect_faces.back().face_verts_indexes.push_back(-vect__stack__project_points.size()); // Отрицательные индексы указывают, что в данном месте требуется проектная точка (которую надо рассчитать позже)
+                                                          vect_faces.back().face_verts_indexes.push_back(-_vect__stack__project_points.size()); // Отрицательные индексы указывают, что в данном месте требуется проектная точка (которую надо рассчитать позже)
                                                         }
                                                         continue;
                                                       }
@@ -4310,18 +4335,34 @@ namespace CGAL {
                                                     }
                                                   }
                                                   mtx_.lock();
-                                                  // Выполнить рассчёт проектных точек
-                                                  std::vector<int> vect__replace_project_point_index__into__mesh_point_index;
-                                                  for (auto& elem : vect__stack__project_points) {
-                                                    int point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(elem.project_point, profile_face_index, elem.application_counter, mtx_);
-                                                    vect__replace_project_point_index__into__mesh_point_index.push_back(point_index);
-                                                  }
+                                                  //// Выполнить рассчёт проектных точек
+                                                  //std::vector<int> vect__replace_project_point_index__into__mesh_point_index;
+                                                  //for (auto& elem : vect__stack__project_points) {
+                                                  //  int point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(elem.project_point, profile_face_index, elem.application_counter, mtx_);
+                                                  //  vect__replace_project_point_index__into__mesh_point_index.push_back(point_index);
+                                                  //}
+                                                  //for (auto& face_info : vect_faces) {
+                                                  //  std::vector/*point indexes*/<int> face_verts_indexes;
+                                                  //  for (auto& point_index : face_info.face_verts_indexes) {
+                                                  //    int new_point_index = point_index;
+                                                  //    if (point_index < 0) {
+                                                  //      new_point_index = vect__replace_project_point_index__into__mesh_point_index[-(point_index+1/*были только отрицательные индексы, начинались от -1, теперь они стали положительными, начинаясь от 0, поэтому к старому отрицательному индексу надо добавить 1, чтобы индексация вернулась от 0*/)];
+                                                  //      project_point__to__mesh__counter++;
+                                                  //    }
+                                                  //    face_verts_indexes.push_back(new_point_index);
+                                                  //  }
+                                                  //  face_info.face_verts_indexes = face_verts_indexes;
+                                                  //}
+                                                  // Пересчитать индексы локальных проектных точек на индексы в глобальном списке:
                                                   for (auto& face_info : vect_faces) {
                                                     std::vector/*point indexes*/<int> face_verts_indexes;
                                                     for (auto& point_index : face_info.face_verts_indexes) {
                                                       int new_point_index = point_index;
                                                       if (point_index < 0) {
-                                                        new_point_index = vect__replace_project_point_index__into__mesh_point_index[-(point_index+1/*были только отрицательные индексы, начинались от -1, теперь они стали положительными, начинаясь от 0, поэтому к старому отрицательному индексу надо добавить 1, чтобы индексация вернулась от 0*/)];
+                                                        auto& project_point__to__mesh = _vect__stack__project_points[-(point_index+1)];
+                                                        vect__stack__project_points.push_back(project_point__to__mesh);
+                                                        new_point_index = -vect__stack__project_points.size(); // Пересчёт индекса локальной project_point в глобальный (позже именно по нему будет пересчёт проектной точки в точку mesh)
+                                                        project_point__to__mesh__counter++;
                                                       }
                                                       face_verts_indexes.push_back(new_point_index);
                                                     }
@@ -4346,7 +4387,7 @@ namespace CGAL {
                                 }
                                 timer1.stop();
                                 if (verbose == true) {
-                                           printf("\n " VAL2STR(Msg::_0053) ". SS 2D Offset. calc faces of segments.                               general time: % 10.5f", timer1.time() );
+                                           printf("\n " VAL2STR(Msg::_0053) ". SS 2D Offset. calc faces of segments.                               general time: % 10.5f, projects to mesh: %4d", timer1.time(), project_point__to__mesh__counter);
                                 }
 #ifdef _DEBUG
                                 //if (verbose) {
@@ -4406,7 +4447,12 @@ namespace CGAL {
                                     for (auto& face_info : vect__faces_info) {
                                       // Разбить все точки face на те, которые рассчитаны или заданы и те, которые не заданы
                                       for (auto& point_index : face_info.face_verts_indexes) {
-
+                                        if (point_index < 0) {
+                                          auto& project_point_info = vect__stack__project_points[-(point_index + 1)];
+                                          int new_index = calc_points.get_index_or_append__project_point__vertex__application_counter(project_point_info.project_point, project_point_info.profile_face_index, project_point_info.application_counter);
+                                          //int point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(elem.project_point, profile_face_index, elem.application_counter);
+                                          point_index = new_index;
+                                        }
                                         auto& shape_point = calc_points.vect__point_index__mesh_point[point_index];
                                         if (shape_point.is_altitude_calc == false) {
                                           // Формула рассчёта высоты проектных точек, по данным из волнового фронта (shape_point.event_time)
@@ -4416,9 +4462,12 @@ namespace CGAL {
                                           double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
                                           double z_time_d = CGAL::to_double(z_time);
 #endif
-                                          calc_points.vect__point_index__mesh_point[shape_point.index].is_altitude_calc = true;
-                                          calc_points.vect__point_index__mesh_point[shape_point.index].point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
-                                          calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude = z_time;
+                                          //calc_points.vect__point_index__mesh_point[shape_point.index].is_altitude_calc = true;
+                                          //calc_points.vect__point_index__mesh_point[shape_point.index].point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
+                                          //calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude = z_time;
+                                          shape_point.is_altitude_calc = true;
+                                          shape_point.point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
+                                          shape_point.oioa_altitude = z_time;
                                         }
 #ifdef _DEBUG
                                         double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
