@@ -183,9 +183,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
     time01 = time()-time01
     if verbose==True:
-        print(f'\nOffset Straight Skeleton. Prepare data from external call: {time01} ms')
+        print(f'\nPrepare data to ctypes before call library: {time01} ms')
 
     try:
+        timer_process_external_call = time()
         md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
             ctypes_in_shapes_mode,
@@ -212,6 +213,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             use_cache_of_straight_skeleton,
             bevel_more_split,
         )
+        if verbose==True:
+            timer_process_external_call = time()-timer_process_external_call
+            print(f'\nexternal process finished in {timer_process_external_call} ms')
         ################ Get Results ################
         mdc = md.contents
 
