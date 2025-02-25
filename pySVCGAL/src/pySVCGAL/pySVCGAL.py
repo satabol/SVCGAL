@@ -20,6 +20,7 @@ class MESH_DATA2(ctypes.Structure):
         
         ("nn_objects", ctypes.c_int),
         ("nn_objects_indexes", ctypes.POINTER( ctypes.c_int), ),
+        ("nn_objects_original_indexes", ctypes.POINTER( ctypes.c_int), ),
         ("nn_offsets_counts" , ctypes.POINTER( ctypes.c_int), ),
         ("nn_offsets_indexes", ctypes.POINTER( ctypes.c_int), ),
 
@@ -94,6 +95,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     offsets_counters                = []
     offsets_array                   = []
     altitudes_array                 = []
+    matrix_array                    = []
     profile_faces__counters         = [] # Счётчик количества faces на один объект (количество этого параметра равно количеству объектов)
     profile_faces__indexes_counters = [] # Счётчик количества индексов у каждого face
     profile_faces__indexes_array    = [] # Индексы каждого face
@@ -108,6 +110,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         offsets_counters.append(len(object1['offsets']))
         offsets_array   .extend(object1['offsets'])
         altitudes_array .extend(object1['altitudes'])
+        matrix_array    .append(object1['matrix'])
 
         # Собрать данные по faces, из которых состоит профиль для SS
         profile_faces__counters.append(len(object1['profile_faces__indexes']))
@@ -249,7 +252,8 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             mdc_nn_faces_indexes_counters = mdc.nn_faces_indexes_counters
 
             for I in range(mdc.nn_objects):
-                object_index = mdc.nn_objects_indexes[I]
+                object_index            = mdc.nn_objects_indexes[I]
+                object_original_index   = mdc.nn_objects_original_indexes[I]
 
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
@@ -287,6 +291,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 
                 new_mesh['objects'].append({
                     'object_index'              : object_index,
+                    'object_original_index'     : object_original_index,
                     'offsets_indexes'           : offsets_indexes,
                     'vertices'                  : new_vertices1,
                     'edges'                     : new_edges1,
