@@ -1248,6 +1248,31 @@ namespace CGAL {
           std::memcpy(bytes, &value, sizeof(FT));
         }
 
+        DLLEXPORT int fill_vertices(float src[][3], float* target, int size) {
+          for (int I = 0; I <= size - 1; I++) {
+            float f0 = src[I][0];
+            float f1 = src[I][1];
+            float f2 = src[I][2];
+            target[I*3+0] = f0;
+            target[I*3+1] = f1;
+            target[I*3+2] = f2;
+          }
+          return 0;
+        }
+        DLLEXPORT int fill_edges(int* src[2], int* target[2], int size) {
+          for (int I = 0; I <= size - 1; I++) {
+            target[I][0] = src[I][0];
+            target[I][1] = src[I][1];
+          }
+          return 0;
+        }
+        DLLEXPORT int fill_faces(int* src, int* target, int size) {
+          for (int I = 0; I <= size - 1; I++) {
+            target[I] = src[I];
+          }
+          return 0;
+        }
+
         /// <summary>
         /// Кэширование SS на основе crc координат, по которым строится SS. <image url="..\code_images\file_0081.png" scale=".3"/>
         /// </summary>
@@ -1759,7 +1784,13 @@ namespace CGAL {
               // 2-INVERT_HOLES (Exclude outer boundary and fill holes).
               // <image url="..\code_images\file_0026.png" scale=".1"/>
               for (auto& object1 : objects) {
-                int shapes_mode1 = in_shapes_mode[object1_index];
+                // Видно, что не все буквы обработаны, потому что тут после split исходного объекта при увеличении количества объектов в параметре in_shapes_mode
+                // "новые" индексы выходят за допустимый диапазон и тут или access violation или неопределённое поведение!
+                // Если использовать object1_index напрямую, то возможна такая ошибка: <image url="..\code_images\file_0094.png" scale=".2"/>.
+
+                //int shape_mode_index = object1_index <= in_count_of_objects ? object1_index : in_count_of_objects - 1;
+                //int shapes_mode1 = in_shapes_mode[shape_mode_index];
+                int shapes_mode1 = in_shapes_mode[object1.object_original_index];
                 if (shapes_mode1 == 0) {
                   // Оставить исходные объекты без изменений
                 } else {
@@ -3501,9 +3532,19 @@ namespace CGAL {
                               };
 
                               /// <summary>
-                              /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом, но рассчёт высоты сделать позже.
+                              /// Превратить точку типа PROJECT_POINT в реальную точку (эта точна изначально находится в отрицательной зоне [с отрицательным индексом]) - добавить её в массив точек с положительным индексом
+                              /// и сразу выполнить рассчёт её высоты.
                               /// </summary>
-                              int get_index_or_append__project_point__vertex__application_counter(int point_index, int profile_face_index, int application_index /*, boost::mutex& mtx_*/) {
+                              int get_index_or_append__project_point__vertex__application_counter(
+                                int point_index,
+                                int profile_face_index,
+                                int application_index,
+                                FT oioa0_altitude,
+                                FT oioa1_altitude,
+                                FT oioa0_offset,
+                                FT oioa1_offset
+                              /*, boost::mutex& mtx_*/
+                              ) {
                                 // Получить проектную точку
                                 //auto& ppoint = map__point_index__calc_point[point_index];
                                 auto& project_point = vect__point_index__project_point[-(point_index+1 /*индексы для проектных точек отрицательные и всегда начинаеются с -1, поэтому, чтобы попасть в 0, нужно прибавлять 1 */ )];
@@ -3513,24 +3554,26 @@ namespace CGAL {
                                 //mtx_.lock();
                                 const auto& it = map__ss_id__vertex_id.find(ss_id__vertex_id);
                                 if (it == map__ss_id__vertex_id.end()) {
+                                  FT z_time = (oioa1_altitude - oioa0_altitude) * (project_point.event_time - oioa0_offset) / (oioa1_offset - oioa0_offset) + oioa0_altitude;
+                                  Point_3 p3 = Point_3(project_point.point.x(), project_point.point.y(), z_time);
                                   // Добавить её в список результирующих точек
-                                  //res_counter = ss_intersects_he_points_counter++; // ++ не просто так стоит после, т.к. после "захвата" индекса надо сразу задать следующий индекс.
                                   SHAPE_POINT& mesh_point = SHAPE_POINT(
                                     -1 /*индекс ещё не известен*/,
                                     point_index, /*Из какой проектной точки она получена*/
                                     SHAPE_POINT::POINT_TYPE::APPLICATED_PROJECT_POINT,
-                                    project_point.point,
-                                    false /*положение по высоте ещё не рассчитывалось*/,
+                                    p3, //project_point.point,
+                                    true /*положение по высоте рассчитано*/,
                                     0.0 /*offset - не имеет значения для проектной вершины, т.к. это не offset, а PROJECT_POINT*/,
                                     0   /*_oioa_offset_index - не имеет значения, т.к. это не offset, а PROJECT_POINT*/,
-                                    0 /*_oioa_altitude - инициализация altitude, т.к. высота этой точки ещё не рассчитана, будет рассчитываться позже*/,
+                                    z_time   /*_oioa_altitude - высота этой точки рассчитана*/,
                                     project_point.is_border /*не важно, но сохраню*/,
                                     project_point.ss_id,
                                     project_point.ss_sign /*вроде не важно, но сохраню*/,
                                     project_point.vertex_id /*Используется для поиска, что такая точка типа PROJECT_POINT уже применялась/использовалась*/,
                                     application_index, /* Порядковый номер проектной точки в пределах profile_face_index */
-                                    project_point.event_time /*Используется для повторения высоты точки, если она находится между двумя offset-ами*/
+                                    project_point.event_time /*Используется для получения высоты точки, если она находится между двумя offset-ами*/
                                   );
+
                                   // Создать реальную точку из проектной
                                   vect__point_index__mesh_point.push_back(mesh_point);
                                   res_counter = vect__point_index__mesh_point.size()-1;
@@ -4469,33 +4512,44 @@ namespace CGAL {
                                       // Разбить все точки face на те, которые рассчитаны или заданы и те, которые не заданы
                                       for (auto& point_index : face_info.face_verts_indexes) {
                                         if (point_index < 0) {
+                                          // Если индекс отрицательный, то имеем дело с проектной точкой. Нужно преобразовать её в точку mesh.
                                           auto& project_point_info = vect__stack__project_points[-(point_index + 1)];
-                                          int new_index = calc_points.get_index_or_append__project_point__vertex__application_counter(project_point_info.project_point, project_point_info.profile_face_index, project_point_info.application_counter);
-                                          //int point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(elem.project_point, profile_face_index, elem.application_counter);
-                                          point_index = new_index;
+                                          point_index = calc_points.get_index_or_append__project_point__vertex__application_counter(
+                                            project_point_info.project_point,
+                                            project_point_info.profile_face_index,
+                                            project_point_info.application_counter,
+                                            face_info.oioa0_altitude,
+                                            face_info.oioa1_altitude,
+                                            face_info.oioa0_offset,
+                                            face_info.oioa1_offset
+                                          );
                                         }
-                                        auto& shape_point = calc_points.vect__point_index__mesh_point[point_index];
-                                        if (shape_point.is_altitude_calc == false) {
-                                          // Формула рассчёта высоты проектных точек, по данным из волнового фронта (shape_point.event_time)
-                                          FT z_time = (face_info.oioa1_altitude - face_info.oioa0_altitude) * (shape_point.event_time - face_info.oioa0_offset) / (face_info.oioa1_offset - face_info.oioa0_offset) + face_info.oioa0_altitude;
-#ifdef _DEBUG
-                                          double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
-                                          double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
-                                          double z_time_d = CGAL::to_double(z_time);
-#endif
-                                          //calc_points.vect__point_index__mesh_point[shape_point.index].is_altitude_calc = true;
-                                          //calc_points.vect__point_index__mesh_point[shape_point.index].point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
-                                          //calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude = z_time;
-                                          shape_point.is_altitude_calc = true;
-                                          shape_point.point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
-                                          shape_point.oioa_altitude = z_time;
-                                        }
-#ifdef _DEBUG
-                                        double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
-                                        double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
-                                        double oioa_altitude = CGAL::to_double(calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude);
-                                        int x = 0;
-#endif
+                                        // TODO: Вроде как тут можно отказаться от этого условия и рассчёта, если передавать параметры для
+                                        // рассчёта точки сразу в предыдущее условие, чтобы там и считать, если такая точка ещё
+                                        // не была создана.
+                                        // Update: нет, нельзя. <image url="..\code_images\file_0093.png" scale=".4"/>. TODO: требуется объяснение.
+//                                        auto& shape_point = calc_points.vect__point_index__mesh_point[point_index];
+//                                        if (shape_point.is_altitude_calc == false) {
+//                                          // Формула рассчёта высоты проектных точек, по данным из волнового фронта (shape_point.event_time)
+//                                          FT z_time = (face_info.oioa1_altitude - face_info.oioa0_altitude) * (shape_point.event_time - face_info.oioa0_offset) / (face_info.oioa1_offset - face_info.oioa0_offset) + face_info.oioa0_altitude;
+//#ifdef _DEBUG
+//                                          double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
+//                                          double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
+//                                          double z_time_d = CGAL::to_double(z_time);
+//#endif
+//                                          //calc_points.vect__point_index__mesh_point[shape_point.index].is_altitude_calc = true;
+//                                          //calc_points.vect__point_index__mesh_point[shape_point.index].point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
+//                                          //calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude = z_time;
+//                                          shape_point.is_altitude_calc = true;
+//                                          shape_point.point = Point_3(shape_point.point.x(), shape_point.point.y(), z_time);
+//                                          shape_point.oioa_altitude = z_time;
+//                                        }
+//#ifdef _DEBUG
+//                                        double oioa0_altitude = CGAL::to_double(face_info.oioa0_altitude);
+//                                        double oioa1_altitude = CGAL::to_double(face_info.oioa1_altitude);
+//                                        double oioa_altitude = CGAL::to_double(calc_points.vect__point_index__mesh_point[shape_point.index].oioa_altitude);
+//                                        int x = 0;
+//#endif
                                       }
                                     }
                                   }

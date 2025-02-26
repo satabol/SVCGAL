@@ -49,6 +49,15 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     """   
     time01 = time()
 
+    # Оставить на будущее для дальнейших работ по увеличению производительности:
+    # fill_vertices = SVCGAL_clib.fill_vertices
+    # fill_vertices.argtypes = [
+    #     ctypes.POINTER((ctypes.c_float)*3 ),  # src
+    #     np.ctypeslib.ndpointer(dtype=np.float32, ndim=2, flags='C_CONTIGUOUS'),  # target
+    #     ctypes.c_int,                         # count
+    # ]
+    # fill_vertices.restype=None
+
     # https://docs.python.org/3/library/ctypes.html
     straight_skeleton_2d_offset = SVCGAL_clib.straight_skeleton_2d_offset
     straight_skeleton_2d_offset.argtypes = [
@@ -251,6 +260,8 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             mdc_nn_faces = mdc.nn_faces
             mdc_nn_faces_indexes_counters = mdc.nn_faces_indexes_counters
 
+            #summ_vertices_count = 0 # Для тестирования загрузки данных в numpy array
+
             for I in range(mdc.nn_objects):
                 object_index            = mdc.nn_objects_indexes[I]
                 object_original_index   = mdc.nn_objects_original_indexes[I]
@@ -258,6 +269,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
                 vertices_count = mdc.nn_verts[I]
+                #summ_vertices_count += vertices_count # Для тестирования загрузки данных через numpy array
                 new_vertices1 = [ tuple(mdc_vertices[verts_I0+i]) for i in range(vertices_count)]
                 verts_I0 += vertices_count
 
@@ -300,6 +312,15 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
                 pass
             pass
+
+        
+            # if summ_vertices_count>0:
+            #     # Тестирование загрузки vertices в numpy массив. Оставить на будущее для дальнейших работ по увеличению производительности:
+            #     np_vertices = np.zeros((summ_vertices_count, 3), dtype=np.float32)
+            #     time_10 = time()
+            #     fill_vertices(mdc.vertices, np_vertices, summ_vertices_count)
+            #     time_10 = time()-time_10
+            # pass
 
         time01 = time()-time01
         if verbose==True:
