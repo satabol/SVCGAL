@@ -67,6 +67,7 @@
 #include <CGAL/Polygon_mesh_processing/merge_border_vertices.h>
 #include <boost/crc.hpp>
 #include <boost/archive/binary_oarchive.hpp>
+#include <ctime>
 //#include <boost/property_map/property_map.hpp> - исследовал возможность задания id для halfedges для Polygon_2, чтобы они сохранялить в SS - пока неудачно.
 
 namespace SS = CGAL::CGAL_SS_i;
@@ -1672,7 +1673,7 @@ namespace CGAL {
                         OIOA _oioa1(object_index, oioa1.object_original_index, oioa1.offset_index, oioa1.offset, oioa1.altitude);
                         vect_oioa1.push_back(_oioa1);
                       }
-                      auto& obj1 = ClsObject(object_index, object1.object_index, vect_oioa1, vect_cs, SS_TYPE::UNDEFINED );
+                      ClsObject obj1(object_index, object1.object_index, vect_oioa1, vect_cs, SS_TYPE::UNDEFINED );
                       obj1.vect_polygons_with_holes.push_back(ppwh);
                       vect_split_mode.push_back(obj1);
                       object_index++;
@@ -2209,7 +2210,13 @@ namespace CGAL {
                     // Отсортировать по offsets. Будет удобно считать, если при увеличении отступа пропадёт контур,то и считать следующие бОльшие контуры не надо
                     // - в многопоточности это уже не актуально. Может и можно в итоге прервать, но надо поискать другой метод. sort(positive_offsets_data1.vect_oap.begin(), positive_offsets_data1.vect_oap.end(), [](const OAP& oap1, const OAP& oap2) {return oap1.offset < oap2.offset; });
                     // Положительные отступы считаются по одному
-                    POMS p1(object1.object_index, object1.object_original_index, std::shared_ptr<Polygon_with_holes_2>(), object1.vect_oioa, object1.ss_type /*Изначально все создаваемые полигоны неопределены, т.к. отрицательные отступы рассчитываются разделением PWH-полигонов на вспомогательные объекты*/);
+                    POMS p1(
+                      object1.object_index,
+                      object1.object_original_index,
+                      std::shared_ptr<Polygon_with_holes_2>(),
+                      object1.vect_oioa,
+                      object1.ss_type /*Изначально все создаваемые полигоны неопределены, т.к. отрицательные отступы рассчитываются разделением PWH-полигонов на вспомогательные объекты*/
+                    );
                     p1.polygon1_with_holes = std::move(polygon_with_holes1);
                     vect_polygon1_oioa.push_back(p1);
                   }
@@ -2337,7 +2344,10 @@ namespace CGAL {
                       if (verbose == true) {
                         mtx_.lock();
                         vect_polygon1_oioa_rest--;
-                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Calc SS. || ss_id: %2zu Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f, cached: %s, used from cache: %s, crc: %10u", ss_id_counter, threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time(), is_ss_cached==true ? "YES" : " NO", is_ss_used_as_chached==true ? "YES" : " NO", crc_val);
+                        std::time_t t = std::time(nullptr);
+                        std::tm* now = std::localtime(&t);
+
+                        printf("\n " VAL2STR(Msg::_0026) ". SS 2D Offset. Calc SS. || ss_id: %2zu Thread: %4u/ %4zu/ %4zu, SsBuilder verts: % 6d, build time: % 12.5f, cached: %s, used from cache: %s, crc: %10u, time: %2d:%2d:%2d", ss_id_counter, threads_counts, vect_polygon1_oioa_rest /*осталось*/, vect_polygon1_oioa_size/*Количество объектов во время многопоточного рассчёта*/, verts_count, timer2.time(), is_ss_cached==true ? "YES" : " NO", is_ss_used_as_chached==true ? "YES" : " NO", crc_val, now->tm_hour, now->tm_min, now->tm_sec  /*Вывод текущего времени, чтобы видеть сколько времени прошло с момента задержки, когда большие скелетоны*/);
                         mtx_.unlock();
                       }
                       // Proceed only if the skeleton was correctly constructed.
@@ -3456,7 +3466,22 @@ namespace CGAL {
                                 const auto& it = map__ss_id__he_handle.find(ss_id__he_handle__offset_index);
                                 int res_counter = -1;
                                 if (it == map__ss_id__he_handle.end()) {
-                                  SHAPE_POINT& mesh_point = SHAPE_POINT(-1/*индекс ещё неизвестен*/, -1 /* для точки пересечения he не важно. Важно только для точки типа PROJECT_POINT */, point_type, _point, _is_altitude_calc, _oioa_offset, _oioa_offset_index, _oioa_altitude, false /*точки пересечения точно не могут быть крайними, т.к. они находятся между точками SS*/, ss_id, ss_sign, 0 /*это не тип PROJECT_POINT,значение не важно*/, -1 /*_application_index для точки пересечения he не важен */, 0.0 /*event_time - тут не имеет значения*/);
+                                  SHAPE_POINT mesh_point(
+                                    -1/*индекс ещё неизвестен*/,
+                                    -1 /* для точки пересечения he не важно. Важно только для точки типа PROJECT_POINT */,
+                                    point_type,
+                                    _point,
+                                    _is_altitude_calc,
+                                    _oioa_offset,
+                                    _oioa_offset_index,
+                                    _oioa_altitude,
+                                    false /*точки пересечения точно не могут быть крайними, т.к. они находятся между точками SS*/,
+                                    ss_id,
+                                    ss_sign,
+                                    0 /*это не тип PROJECT_POINT,значение не важно*/,
+                                    -1 /*_application_index для точки пересечения he не важен */,
+                                    0.0 /*event_time - тут не имеет значения*/
+                                  );
                                   vect__point_index__mesh_point.push_back(mesh_point);
                                   res_counter = vect__point_index__mesh_point.size() - 1;
                                   vect__point_index__mesh_point.back().index =
@@ -3502,8 +3527,7 @@ namespace CGAL {
                                   // res_counter = ss_ppoints_counter--;
                                   
                                   // Если точка не найдена, то создать её с новым индексом
-                                  SHAPE_POINT& project_point =
-                                    SHAPE_POINT(
+                                  SHAPE_POINT project_point(
                                       -1/*индекс ещё не известен*/,
                                       -1 /* project_point_index - изначально она ни на кого не ссылается */,
                                       point_type,
@@ -3557,7 +3581,7 @@ namespace CGAL {
                                   FT z_time = (oioa1_altitude - oioa0_altitude) * (project_point.event_time - oioa0_offset) / (oioa1_offset - oioa0_offset) + oioa0_altitude;
                                   Point_3 p3 = Point_3(project_point.point.x(), project_point.point.y(), z_time);
                                   // Добавить её в список результирующих точек
-                                  SHAPE_POINT& mesh_point = SHAPE_POINT(
+                                  SHAPE_POINT mesh_point(
                                     -1 /*индекс ещё не известен*/,
                                     point_index, /*Из какой проектной точки она получена*/
                                     SHAPE_POINT::POINT_TYPE::APPLICATED_PROJECT_POINT,
@@ -3573,7 +3597,9 @@ namespace CGAL {
                                     application_index, /* Порядковый номер проектной точки в пределах profile_face_index */
                                     project_point.event_time /*Используется для получения высоты точки, если она находится между двумя offset-ами*/
                                   );
-
+#ifdef _DEBUG
+                                  mesh_point.project_point_index = point_index;
+#endif
                                   // Создать реальную точку из проектной
                                   vect__point_index__mesh_point.push_back(mesh_point);
                                   res_counter = vect__point_index__mesh_point.size()-1;
@@ -3843,7 +3869,7 @@ namespace CGAL {
                                                   for (auto& he_offset : vect__intersection_point_info) {
                                                     Point_3 p3(he_offset.point.x(), he_offset.point.y(), he_offset.oioa_altitude);
                                                     int point_index = calc_points.get_index_or_append_he__offset_index(
-                                                      ss_id,
+                                                      segment_faces_I.ss_id, //ss_id,
                                                       pt,
                                                       hds_offset_h,
                                                       he_offset.oioa_offset_index,

@@ -67,3 +67,13 @@ Copy results .dll and .so into pySVCGAL/src/pySVCGAL/clib/*.*
 4. Publish pypi
 
 To do this part goto pySVCGAL readme.
+
+## Fixed
+
+Appended clock time column in verbose mode into ss calc:
+
+![File 0096](code_images/file_0096.png)
+
+Some contours are unclosed if profiles has negative values:
+![File 0095](code_images/file_0095.png)
+
