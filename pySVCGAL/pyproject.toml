@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pySVCGAL"
-version = "0.0.21"
+version = "0.0.23"
 authors = [
   { name="Satabol", email="satabol@yandex.ru" },
 ]

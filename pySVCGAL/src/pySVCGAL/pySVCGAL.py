@@ -20,6 +20,7 @@ class MESH_DATA2(ctypes.Structure):
         
         ("nn_objects", ctypes.c_int),
         ("nn_objects_indexes", ctypes.POINTER( ctypes.c_int), ),
+        ("nn_objects_original_indexes", ctypes.POINTER( ctypes.c_int), ),
         ("nn_offsets_counts" , ctypes.POINTER( ctypes.c_int), ),
         ("nn_offsets_indexes", ctypes.POINTER( ctypes.c_int), ),
 
@@ -47,6 +48,15 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     Documentation
     """   
     time01 = time()
+
+    # Оставить на будущее для дальнейших работ по увеличению производительности:
+    # fill_vertices = SVCGAL_clib.fill_vertices
+    # fill_vertices.argtypes = [
+    #     ctypes.POINTER((ctypes.c_float)*3 ),  # src
+    #     np.ctypeslib.ndpointer(dtype=np.float32, ndim=2, flags='C_CONTIGUOUS'),  # target
+    #     ctypes.c_int,                         # count
+    # ]
+    # fill_vertices.restype=None
 
     # https://docs.python.org/3/library/ctypes.html
     straight_skeleton_2d_offset = SVCGAL_clib.straight_skeleton_2d_offset
@@ -94,6 +104,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
     offsets_counters                = []
     offsets_array                   = []
     altitudes_array                 = []
+    matrix_array                    = []
     profile_faces__counters         = [] # Счётчик количества faces на один объект (количество этого параметра равно количеству объектов)
     profile_faces__indexes_counters = [] # Счётчик количества индексов у каждого face
     profile_faces__indexes_array    = [] # Индексы каждого face
@@ -108,6 +119,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
         offsets_counters.append(len(object1['offsets']))
         offsets_array   .extend(object1['offsets'])
         altitudes_array .extend(object1['altitudes'])
+        matrix_array    .append(object1['matrix'])
 
         # Собрать данные по faces, из которых состоит профиль для SS
         profile_faces__counters.append(len(object1['profile_faces__indexes']))
@@ -183,9 +195,10 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
     time01 = time()-time01
     if verbose==True:
-        print(f'\nOffset Straight Skeleton. Prepare data from external call: {time01} ms')
+        print(f'\nPrepare data to ctypes before call library: {time01} ms')
 
     try:
+        timer_process_external_call = time()
         md = straight_skeleton_2d_offset(
             ctypes_in_count_of_objects,
             ctypes_in_shapes_mode,
@@ -212,6 +225,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             use_cache_of_straight_skeleton,
             bevel_more_split,
         )
+        if verbose==True:
+            timer_process_external_call = time()-timer_process_external_call
+            print(f'\nexternal process finished in {timer_process_external_call} ms')
         ################ Get Results ################
         mdc = md.contents
 
@@ -244,12 +260,16 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
             mdc_nn_faces = mdc.nn_faces
             mdc_nn_faces_indexes_counters = mdc.nn_faces_indexes_counters
 
+            #summ_vertices_count = 0 # Для тестирования загрузки данных в numpy array
+
             for I in range(mdc.nn_objects):
-                object_index = mdc.nn_objects_indexes[I]
+                object_index            = mdc.nn_objects_indexes[I]
+                object_original_index   = mdc.nn_objects_original_indexes[I]
 
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
                 vertices_count = mdc.nn_verts[I]
+                #summ_vertices_count += vertices_count # Для тестирования загрузки данных через numpy array
                 new_vertices1 = [ tuple(mdc_vertices[verts_I0+i]) for i in range(vertices_count)]
                 verts_I0 += vertices_count
 
@@ -283,6 +303,7 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 
                 new_mesh['objects'].append({
                     'object_index'              : object_index,
+                    'object_original_index'     : object_original_index,
                     'offsets_indexes'           : offsets_indexes,
                     'vertices'                  : new_vertices1,
                     'edges'                     : new_edges1,
@@ -291,6 +312,15 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
 
                 pass
             pass
+
+        
+            # if summ_vertices_count>0:
+            #     # Тестирование загрузки vertices в numpy массив. Оставить на будущее для дальнейших работ по увеличению производительности:
+            #     np_vertices = np.zeros((summ_vertices_count, 3), dtype=np.float32)
+            #     time_10 = time()
+            #     fill_vertices(mdc.vertices, np_vertices, summ_vertices_count)
+            #     time_10 = time()-time_10
+            # pass
 
         time01 = time()-time01
         if verbose==True:
