@@ -266,14 +266,18 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 object_index            = mdc.nn_objects_indexes[I]
                 object_original_index   = mdc.nn_objects_original_indexes[I]
                 if verbose==True:
-                    print("")
-                    print(f'object index: {object_index}, ', end="")
+                    ## for developer:
+                    # print("")
+                    # print(f'object index: {object_index}, ', end="")
+                    pass
 
                 #print(f"Loading data for object {I}")
                 #### Extract New Vertices #### 
                 vertices_count = mdc.nn_verts[I]
                 if verbose==True:
-                    print(f'verts: [pos: {verts_I0}, count: {vertices_count}], ', end="")
+                    ## for developer:
+                    #print(f'verts: [pos: {verts_I0}, count: {vertices_count}], ', end="")
+                    pass
                 #summ_vertices_count += vertices_count # Для тестирования загрузки данных через numpy array
                 new_vertices1 = [ tuple(mdc_vertices[verts_I0+i]) for i in range(vertices_count)]
                 verts_I0 += vertices_count
@@ -281,7 +285,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 #### Extract New Edges ####
                 edges_count = mdc.nn_edges[I]
                 if verbose==True:
-                    print(f'edges: [pos: {edges_I0}, count: {edges_count}], ', end="")
+                    ## for developer:
+                    #print(f'edges: [pos: {edges_I0}, count: {edges_count}], ', end="")
+                    pass
                 new_edges1 = [ tuple(mdc_edges[edges_I0+i]) for i in range(edges_count)]
                 edges_I0 += edges_count
 
@@ -290,7 +296,9 @@ def pySVCGAL_straight_skeleton_2d_offset(data):
                 faces_count = mdc_nn_faces[I]
                 faces_indexes_counters = [ mdc_nn_faces_indexes_counters[faces_I0+i] for i in range(faces_count)]
                 if verbose==True:
-                    print(f'faces: [pos: {faces_indexes_I0}, count: {faces_indexes_counters}], ', end="")
+                    ## for developer:
+                    #print(f'faces: [pos: {faces_indexes_I0}, count: {faces_indexes_counters}], ', end="")
+                    pass
                 faces_indexes_pos = 0
                 new_faces1 = []
                 new_faces1_append = new_faces1.append

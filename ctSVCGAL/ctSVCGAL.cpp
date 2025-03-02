@@ -1673,7 +1673,7 @@ namespace CGAL {
                         OIOA _oioa1(object_index, oioa1.object_original_index, oioa1.offset_index, oioa1.offset, oioa1.altitude);
                         vect_oioa1.push_back(_oioa1);
                       }
-                      ClsObject obj1(object_index, object1.object_index, vect_oioa1, vect_cs, SS_TYPE::UNDEFINED );
+                      ClsObject obj1(object_index, object1.object_original_index, vect_oioa1, vect_cs, SS_TYPE::UNDEFINED );
                       obj1.vect_polygons_with_holes.push_back(ppwh);
                       vect_split_mode.push_back(obj1);
                       object_index++;
@@ -2377,7 +2377,7 @@ namespace CGAL {
                       } else {
                         try {
                           // Не получилось посчитать Straight Skeleton. Надо сообщить о проблеме пользователю:
-                          Polygon_with_holes_2& _pwh = polygon1_oioa.polygon1_with_holes==nullptr ? Polygon_with_holes_2() : *polygon1_oioa.polygon1_with_holes.get();
+                          const Polygon_with_holes_2& _pwh = polygon1_oioa.polygon1_with_holes==nullptr ? Polygon_with_holes_2() : *polygon1_oioa.polygon1_with_holes.get();
                           res_errors.push_back(ObjectError(polygon1_oioa.vect_oioa[0].object_index, _pwh, VAL2STR(Msg::_0006)". Offset. Error Build Straight Skeleton. Outer Boundary"));
                         } catch (std::exception _ex) {
                           int error = 0;
@@ -3015,7 +3015,7 @@ namespace CGAL {
                       map__object_index__mesh_ss_joined[object_index] = result_ss_Mesh;
                     }
 
-
+                    /*Примечание. доступ к элементам objects не нужно делать через этот object_index. Objects назначаются по одному object на ss_id, если есть отрицательные offsets.*/
                     for (auto& [object_index, mesh_ss_joined] : map__object_index__mesh_ss_joined) {
                       // Смержить вершины результирующего mesh (faces оставить как есть).
                       // В результате одинаковые vertices объединяться, а faces останутся и при этом у них останется прежнее количество вершин. Однако в результате
@@ -4081,7 +4081,8 @@ namespace CGAL {
                                     // Если у объекта не рассчитан ss, то и offsets у него тоже не могут быть посчитаны. mesh у такого объекта будет пустой. Это вполне допустимо,
                                     // по аналогии когда у объекта в результате расчётов не образуется mesh (например, профиль слишком глубоко в shape).
                                   } else {
-                                    auto& vect__offset_faces = map__object_index__profile_faces[object_index];
+                                    auto object_original_index = map__object_index__poms[object_index][0 /*Тут может быть один или два ss_id в зависимости от наличия отрицательных offsets, но 0-й будет всегда, поэтому его и берём*/ ].object_original_index;
+                                    auto& vect__offset_faces = map__object_index__profile_faces[object_original_index];
 
                                     // Набор индексов offset-ов;
                                     std::set<int> set__offset_index;
@@ -4104,78 +4105,85 @@ namespace CGAL {
                                         return res;
                                         });
                                     }
-
-                                    std::vector<int> vect_profile_faces__open_modes = map__object_index__profile_faces__open_modes[object_index];
+                                    
+                                    std::vector<int> vect_profile_faces__open_modes = map__object_index__profile_faces__open_modes[object_original_index];
                                     {
                                       int vect_object_offsets_size = vect_object_offsets.size();
                                       int face_index = 0;
                                       for (auto& face : vect__offset_faces) {
-                                        int face_open_mode = vect_profile_faces__open_modes[face_index++];
-                                        std::vector<EDGE_INFO> vect__edges;
-                                        face_open_mode = face_open_mode == 1 ? 1 : face_open_mode == 2 ? 2 : 0; // Простенький фильтр на допустимые значения
-                                        if (face_open_mode == 2 /*INPAIRS*/) {
-                                          // Соеденить парами
-                                          for (int I = 1; I <= (int)face.size() - 1; I += 2) {
-                                            auto& start_index = face[I - 1];
-                                            auto& end_index = face[I];
-                                            if (start_index == end_index) {
-                                              continue;
+                                        if (face.size() == 0) {
+                                          face_index++;
+                                          // Если face не содержит индексов, то пропустить. Возможно, что сокет faces вообще не подключен, тогда
+                                          // и не добавлять вектор vect__edges в vect__faces__edges. Если 
+                                          continue;
+                                        } else {
+                                          int face_open_mode = vect_profile_faces__open_modes[face_index++];
+                                          std::vector<EDGE_INFO> vect__edges;
+                                          face_open_mode = face_open_mode == 1 ? 1 : face_open_mode == 2 ? 2 : 0; // Простенький фильтр на допустимые значения
+                                          if (face_open_mode == 2 /*INPAIRS*/) {
+                                            // Соеденить парами
+                                            for (int I = 1; I <= (int)face.size() - 1; I += 2) {
+                                              auto& start_index = face[I - 1];
+                                              auto& end_index = face[I];
+                                              if (start_index == end_index) {
+                                                continue;
+                                              }
+                                              // Простая проверка на допустимый диапазон:
+                                              if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 && end_index <= vect_object_offsets_size - 1) {
+                                                vect__edges.push_back(
+                                                  EDGE_INFO(
+                                                    vect_object_offsets[start_index].offset_index,
+                                                    vect_object_offsets[start_index].offset,
+                                                    vect_object_offsets[start_index].altitude,
+                                                    false,
+                                                    vect_object_offsets[end_index].offset_index,
+                                                    vect_object_offsets[end_index].offset,
+                                                    vect_object_offsets[end_index].altitude,
+                                                    false));
+                                              }
                                             }
-                                            // Простая проверка на допустимый диапазон:
-                                            if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
-                                              vect__edges.push_back(
-                                                EDGE_INFO(
-                                                  vect_object_offsets[start_index].offset_index,
-                                                  vect_object_offsets[start_index].offset,
-                                                  vect_object_offsets[start_index].altitude,
+                                          } else if (face_open_mode == 1 /*CLOSED*/ || face_open_mode == 0 /*OPENED*/) {
+                                            // Если задано замкнуть face, то добавить в начало вектора замыкающий edge:
+                                            if (face_open_mode == 1 && face.size() > 2) {
+                                              int last_index = face.size() - 1;
+                                              int first_index = 0;
+                                              if (first_index == last_index) {
+                                                // Если Индексы выходят за допустимый диапазон, то не делать соединения краёв в любом случае (TODO: по хорошему надо информировать пользователя ошибкой)
+                                              } else {
+                                                vect__edges.push_back(EDGE_INFO(
+                                                  vect_object_offsets[face[last_index]].offset_index,
+                                                  vect_object_offsets[face[last_index]].offset,
+                                                  vect_object_offsets[face[last_index]].altitude,
                                                   false,
-                                                  vect_object_offsets[end_index].offset_index,
-                                                  vect_object_offsets[end_index].offset,
-                                                  vect_object_offsets[end_index].altitude,
-                                                  false));
-                                            }
-                                          }
-                                        } else if (face_open_mode == 1 /*CLOSED*/ || face_open_mode == 0 /*OPENED*/) {
-                                          // Если задано замкнуть face, то добавить в начало вектора замыкающий edge:
-                                          if (face_open_mode == 1 && face.size() > 2) {
-                                            int last_index = face.size() - 1;
-                                            int first_index = 0;
-                                            if (first_index == last_index) {
-                                              // Если Индексы выходят за допустимый диапазон, то не делать соединения краёв в любом случае (TODO: по хорошему надо информировать пользователя ошибкой)
-                                            } else {
-                                              vect__edges.push_back(EDGE_INFO(
-                                                vect_object_offsets[face[last_index]].offset_index,
-                                                vect_object_offsets[face[last_index]].offset,
-                                                vect_object_offsets[face[last_index]].altitude,
-                                                false,
-                                                vect_object_offsets[face[first_index]].offset_index,
-                                                vect_object_offsets[face[first_index]].offset,
-                                                vect_object_offsets[face[first_index]].altitude,
-                                                false)
-                                              );
-                                            }
-                                          }
-                                          // Просканировать остальные индексы вокруг face:
-                                          for (int I = 1; I <= (int)face.size() - 1; I++) {
-                                            auto& start_index = face[I - 1];
-                                            auto& end_index = face[I];
-                                            // Проверять, что такие offset-ы есть. Если одного из offset-ов нет, то пропускать такое ребро (edge):
-                                            if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 || end_index <= vect_object_offsets_size - 1) {
-                                              vect__edges.push_back(
-                                                EDGE_INFO(
-                                                  vect_object_offsets[start_index].offset_index,
-                                                  vect_object_offsets[start_index].offset,
-                                                  vect_object_offsets[start_index].altitude,
-                                                  false,
-                                                  vect_object_offsets[end_index].offset_index,
-                                                  vect_object_offsets[end_index].offset,
-                                                  vect_object_offsets[end_index].altitude,
+                                                  vect_object_offsets[face[first_index]].offset_index,
+                                                  vect_object_offsets[face[first_index]].offset,
+                                                  vect_object_offsets[face[first_index]].altitude,
                                                   false)
-                                              );
+                                                );
+                                              }
+                                            }
+                                            // Просканировать остальные индексы вокруг face:
+                                            for (int I = 1; I <= (int)face.size() - 1; I++) {
+                                              auto& start_index = face[I - 1];
+                                              auto& end_index = face[I];
+                                              // Проверять, что такие offset-ы есть. Если одного из offset-ов нет, то пропускать такое ребро (edge):
+                                              if (0 <= start_index && 0 <= end_index && start_index <= vect_object_offsets_size - 1 && end_index <= vect_object_offsets_size - 1) {
+                                                vect__edges.push_back(
+                                                  EDGE_INFO(
+                                                    vect_object_offsets[start_index].offset_index,
+                                                    vect_object_offsets[start_index].offset,
+                                                    vect_object_offsets[start_index].altitude,
+                                                    false,
+                                                    vect_object_offsets[end_index].offset_index,
+                                                    vect_object_offsets[end_index].offset,
+                                                    vect_object_offsets[end_index].altitude,
+                                                    false)
+                                                );
+                                              }
                                             }
                                           }
+                                          vect__faces__edges.push_back(vect__edges);
                                         }
-                                        vect__faces__edges.push_back(vect__edges);
                                       }
                                     }
 
