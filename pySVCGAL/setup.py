@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 from pathlib import Path, os
 
 NAME = 'pySVCGAL'
-VERSION = '0.0.23'
+VERSION = '0.0.24'
 # - First Wrapper
 DESCRIPTION = 'Python pySVCGAL.'
 
@@ -19,14 +19,15 @@ setup(
     long_description_content_type='text/markdown',
     packages = find_packages(),
     include_package_data=True,
-    package_data={f'{NAME}.clib':['*.so', '*.dll']}, # https://stackoverflow.com/questions/70334648/how-to-correctly-install-data-files-with-setup-py
+    package_data={f'{NAME}.clib':['*.so', '*.dll', '*.dylib']}, # https://stackoverflow.com/questions/70334648/how-to-correctly-install-data-files-with-setup-py
     install_requires = [],    
-    keywords = ["skeleton"],
+    keywords = ["straight skeleton 2D offset", "straight skeleton", "skeleton"],
     classifiers= [
-        "Development Status :: 2 - Pre-Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",        
         "Programming Language :: Python :: 3",        
         "Operating System :: Microsoft :: Windows",
-        "Operating System :: Unix",
+        "Operating System :: POSIX :: Linux",
+        "Operating System :: MacOS",
     ]
 )
