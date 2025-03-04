@@ -49,7 +49,14 @@ Linux:
 4. cmake --build . --config Release
 ```
 
-#### 3.2. Build Linux
+#### 3.2. Build MacOS
+
+```
+cmake -G "Ninja Multi-Config" -S . -B build -D CGAL_DIR=../../cgal
+cmake --build build --config Release
+```
+
+#### 3.3. Build Linux
 
 1. open CMakeLists.txt and edit path to Boost stage for linux path
 2. mkdir build_linux && cd build_linux
