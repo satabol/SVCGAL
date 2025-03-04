@@ -20,12 +20,14 @@ for local install from package folder:
 ```
 "E:\install\Blender\blender-3.6.12-windows-x64\3.6\python\Scripts\pip.exe" install .
 ```
+D:\install\Blender\blender-3.6.19-windows-x64\3.6\python\Scripts\pip.exe install .
 
 To uninstall write a name (no some folder name):
 
 ```
 "E:\install\Blender\blender-3.6.12-windows-x64\3.6\python\Scripts\pip.exe" uninstall pySVCGAL
 ```
+D:\install\Blender\blender-3.6.19-windows-x64\3.6\python\Scripts\pip.exe uninstall pySVCGAL
 
 ## Publish/Update package on PyPi
 
