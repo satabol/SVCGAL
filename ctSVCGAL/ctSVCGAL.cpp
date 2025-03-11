@@ -4263,7 +4263,7 @@ namespace CGAL {
                                             for (int I = 0; I <= (int)vect__faces__edges.size() - 1; I++) {
                                               int profile_face_index = I;
                                               auto& vect__edges = vect__faces__edges[I];
-                                              if (vect__edges.size() >= 2) {
+                                              if (vect__edges.size() >= 1 /*Для расчёта требуется, чтобы хоть одно ребро было*/) {
                                                 //mtx_.lock();
                                                 //if (map__profile_face_index__ss_id__mesh_face_id__faces_info.find(profile_face_index) == map__profile_face_index__ss_id__mesh_face_id__faces_info.end()) {
                                                 //  map__profile_face_index__ss_id__mesh_face_id__faces_info[profile_face_index] = std::map<int /*ss_id*/, std::map<int /*mesh_face_id*/, std::vector/*faces*/<FACE_INFO>>>();
